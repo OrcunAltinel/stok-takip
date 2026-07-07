@@ -14,7 +14,7 @@ from PySide6.QtWidgets import (
 )
 
 from arayuz.bilesenler.tarih_filtresi import TarihFiltresi
-from servisler import rapor_servisi
+from servisler import rapor_servisi, satis_servisi
 from veritabani.modeller import Admin
 from yardimcilar.formatlayici import miktar_formatla, para_formatla, tarih_formatla
 
@@ -115,6 +115,7 @@ class RaporlarEkrani(QWidget):
         self.admin = admin
         self._bas = datetime.now().replace(day=1, hour=0, minute=0, second=0)
         self._bit = datetime.now().replace(hour=23, minute=59, second=59)
+        self._satis_ham: list[dict] = []
         self._kur()
         self.yenile()
 
@@ -156,6 +157,8 @@ class RaporlarEkrani(QWidget):
         self.tabs.addTab(self.kar_sekme, "Kâr Raporu")
         layout.addWidget(self.tabs)
 
+        self.satis_sekme.tablo.doubleClicked.connect(self._satis_detay)
+
     def yenile(self):
         self._yukle(self._bas, self._bit)
 
@@ -164,9 +167,20 @@ class RaporlarEkrani(QWidget):
         self._bit = bit
         self._yukle(bas, bit)
 
+    def _satis_detay(self, idx):
+        if idx.row() >= len(self._satis_ham):
+            return
+        fis_id = self._satis_ham[idx.row()]["fis_id"]
+        detay = satis_servisi.fis_detay(fis_id)
+        if not detay:
+            return
+        from arayuz.cari_ekstre_ekrani import _FisDetayDialog
+        _FisDetayDialog(detay, self).exec()
+
     def _yukle(self, bas: datetime, bit: datetime):
         try:
             satislar = rapor_servisi.satis_raporu(bas, bit)
+            self._satis_ham = satislar
             self.satis_sekme.guncelle([
                 [
                     r["fis_no"],

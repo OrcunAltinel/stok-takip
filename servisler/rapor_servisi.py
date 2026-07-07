@@ -32,6 +32,7 @@ def satis_raporu(baslangic: datetime, bitis: datetime) -> list[dict]:
                 if m:
                     musteri_adi = f"{m.ad} {m.soyad}"
             sonuc.append({
+                "fis_id": f.id,
                 "fis_no": f.fis_no,
                 "tarih": f.tarih,
                 "musteri_adi": musteri_adi,
