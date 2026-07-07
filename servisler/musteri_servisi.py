@@ -139,32 +139,52 @@ def tahsilat_al(musteri_id: int, tutar: Decimal, odeme_araci: str, admin_id: int
 def cari_hareketler(musteri_id: int, baslangic=None, bitis=None) -> list[dict]:
     """Müşterinin tüm cari hareketlerini kronolojik sıraya döner."""
     with get_session() as session:
-        from sqlalchemy import or_
-        from veritabani.modeller import SatisFisi, IadeFisi
+        from veritabani.modeller import SatisFisi
 
-        # Ödemeler (tahsilat, bakiye yükleme, satış borcu, iade alacak)
-        odeme_q = session.query(Odeme).filter(Odeme.musteri_id == musteri_id)
+        satirlar = []
+
+        # Tüm satış fişleri (nakit, kart, bakiye, veresiye hepsi görünsün)
+        fis_q = session.query(SatisFisi).filter(
+            SatisFisi.musteri_id == musteri_id,
+            SatisFisi.aktif == True,
+        )
+        if baslangic:
+            fis_q = fis_q.filter(SatisFisi.tarih >= baslangic)
+        if bitis:
+            fis_q = fis_q.filter(SatisFisi.tarih <= bitis)
+
+        for fis in fis_q.all():
+            # Sadece veresiye satışlarda borç doğar; diğerleri nötr gösterilir
+            borc = Decimal(str(fis.genel_toplam)) if fis.odeme_tipi == "VERESIYE" else Decimal("0")
+            satirlar.append({
+                "tarih": fis.tarih,
+                "tip": "SATIS",
+                "belge": fis.fis_no,
+                "borc": borc,
+                "alacak": Decimal("0"),
+                "aciklama": f"{fis.fis_no} — {fis.odeme_tipi}",
+                "fis_id": fis.id,
+            })
+
+        # Finansal hareketler: tahsilat, bakiye yükleme, iade alacak
+        odeme_q = session.query(Odeme).filter(
+            Odeme.musteri_id == musteri_id,
+            Odeme.islem_tipi.in_(["TAHSILAT", "BAKIYE_YUKLEME", "IADE_ALACAK"]),
+        )
         if baslangic:
             odeme_q = odeme_q.filter(Odeme.tarih >= baslangic)
         if bitis:
             odeme_q = odeme_q.filter(Odeme.tarih <= bitis)
 
-        satirlar = []
         for o in odeme_q.all():
-            borc_art = Decimal("0")
-            alacak_art = Decimal("0")
-            if o.islem_tipi == "SATIS_BORC":
-                borc_art = Decimal(str(o.tutar))
-            elif o.islem_tipi in ("TAHSILAT", "BAKIYE_YUKLEME", "IADE_ALACAK"):
-                alacak_art = Decimal(str(o.tutar))
             satirlar.append({
                 "tarih": o.tarih,
                 "tip": o.islem_tipi,
                 "belge": o.aciklama or "",
-                "borc": borc_art,
-                "alacak": alacak_art,
+                "borc": Decimal("0"),
+                "alacak": Decimal(str(o.tutar)),
                 "aciklama": o.aciklama or "",
-                "fis_id": o.iliskili_fis_id,
+                "fis_id": None,
             })
 
         satirlar.sort(key=lambda x: x["tarih"])

@@ -18,6 +18,7 @@ from yardimcilar.formatlayici import miktar_formatla, para_formatla, tarih_forma
 
 _SUTUNLAR = ["Tarih", "İşlem Tipi", "Belge/Açıklama", "Borç", "Alacak"]
 _TIP_ETIKET = {
+    "SATIS": "Satış",
     "SATIS_BORC": "Satış Borcu",
     "TAHSILAT": "Tahsilat",
     "BAKIYE_YUKLEME": "Bakiye Yükleme",
@@ -72,6 +73,11 @@ class CariModel(QAbstractTableModel):
         if role == Qt.ItemDataRole.TextAlignmentRole:
             if col in (3, 4):
                 return Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
+
+        if role == Qt.ItemDataRole.ToolTipRole:
+            if r.get("fis_id"):
+                return "Çift tıklayın — satın alınan ürünleri görüntüleyin"
+
         return None
 
 
