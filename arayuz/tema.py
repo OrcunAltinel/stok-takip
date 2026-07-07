@@ -31,6 +31,20 @@ QPushButton#menu_btn:checked {
     font-weight: bold;
 }
 
+QPushButton#cikis_btn {
+    background-color: transparent;
+    color: #f38ba8;
+    border: 1px solid #f38ba8;
+    border-radius: 6px;
+    padding: 8px 16px;
+    text-align: left;
+    font-size: 13px;
+    margin-top: 4px;
+}
+QPushButton#cikis_btn:hover {
+    background-color: #f38ba822;
+}
+
 QLabel#baslik {
     color: #89b4fa;
     font-size: 18px;
@@ -273,6 +287,17 @@ QPushButton#menu_btn:checked {
     color: #1d6fa4;
     font-weight: bold;
 }
+QPushButton#cikis_btn {
+    background-color: transparent;
+    color: #cc3333;
+    border: 1px solid #cc3333;
+    border-radius: 6px;
+    padding: 8px 16px;
+    text-align: left;
+    font-size: 13px;
+    margin-top: 4px;
+}
+QPushButton#cikis_btn:hover { background-color: #cc333322; }
 QLabel#baslik { color: #1d6fa4; font-size: 18px; font-weight: bold; }
 QPushButton {
     background-color: #1d6fa4;

@@ -13,9 +13,10 @@ from veritabani.modeller import Admin
 
 
 class AnaPencere(QMainWindow):
-    def __init__(self, admin: Admin):
+    def __init__(self, admin: Admin, cikis_yap_cb=None):
         super().__init__()
         self.admin = admin
+        self._cikis_yap_cb = cikis_yap_cb
         self.setWindowTitle("Stok Takip — Oto Yedek Parça Yönetim Sistemi")
         self.resize(1280, 800)
         self.setMinimumSize(1024, 640)
@@ -71,6 +72,12 @@ class AnaPencere(QMainWindow):
             self._menu_butonlari.append((sayfa_adi, btn))
 
         sol_layout.addStretch()
+
+        if self._cikis_yap_cb:
+            cikis_btn = QPushButton("Çıkış Yap")
+            cikis_btn.setObjectName("cikis_btn")
+            cikis_btn.clicked.connect(self._cikis_yap)
+            sol_layout.addWidget(cikis_btn)
 
         # İçerik alanı
         self.stack = QStackedWidget()
@@ -129,6 +136,10 @@ class AnaPencere(QMainWindow):
 
         if hasattr(widget, "yenile"):
             widget.yenile()
+
+    def _cikis_yap(self):
+        if self._cikis_yap_cb:
+            self._cikis_yap_cb()
 
     def closeEvent(self, event: QCloseEvent):
         try:

@@ -1,6 +1,9 @@
 # Veritabanı (gerçek veri içerir)
 veritabani/stok_takip.db
 
+# Oturum (kişisel)
+oturum.json
+
 # Yedekler
 yedekler/
 
