@@ -1,0 +1,32 @@
+# Veritabanı (gerçek veri içerir)
+veritabani/stok_takip.db
+
+# Yedekler
+yedekler/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+*.spec
+
+# Test cache
+.pytest_cache/
+.coverage
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Geçici PDF'ler
+*.pdf
+
+# Windows
+Thumbs.db
+desktop.ini

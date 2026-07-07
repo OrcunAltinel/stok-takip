@@ -1,0 +1,170 @@
+"""Müşteri CRUD, bakiye yükleme ve tahsilat işlemleri."""
+
+from datetime import datetime
+from decimal import Decimal
+from typing import Optional
+
+from veritabani.baglanti import get_session
+from veritabani.modeller import Musteri, Odeme
+
+
+def musteri_listesi(sadece_aktif: bool = True) -> list[Musteri]:
+    with get_session() as session:
+        q = session.query(Musteri)
+        if sadece_aktif:
+            q = q.filter(Musteri.aktif == True)
+        liste = q.order_by(Musteri.ad, Musteri.soyad).all()
+        for m in liste:
+            session.expunge(m)
+        return liste
+
+
+def musteri_ara(arama: str) -> list[Musteri]:
+    with get_session() as session:
+        from sqlalchemy import or_
+        filtre = f"%{arama}%"
+        sonuclar = (
+            session.query(Musteri)
+            .filter(
+                Musteri.aktif == True,
+                or_(
+                    Musteri.ad.ilike(filtre),
+                    Musteri.soyad.ilike(filtre),
+                    Musteri.telefon.ilike(filtre),
+                    Musteri.firma_adi.ilike(filtre),
+                    Musteri.id.ilike(filtre) if arama.isdigit() else False,
+                ),
+            )
+            .order_by(Musteri.ad)
+            .limit(50)
+            .all()
+        )
+        for m in sonuclar:
+            session.expunge(m)
+        return sonuclar
+
+
+def musteri_bul_id(musteri_id: int) -> Optional[Musteri]:
+    with get_session() as session:
+        m = session.query(Musteri).filter_by(id=musteri_id).first()
+        if m:
+            session.expunge(m)
+        return m
+
+
+def musteri_ekle(
+    ad: str,
+    soyad: str,
+    firma_adi: str = None,
+    telefon: str = None,
+    adres: str = None,
+    il: str = None,
+    ilce: str = None,
+    vergi_no: str = None,
+    notlar: str = None,
+) -> Musteri:
+    with get_session() as session:
+        m = Musteri(
+            ad=ad.strip(),
+            soyad=soyad.strip(),
+            firma_adi=firma_adi,
+            telefon=telefon,
+            adres=adres,
+            il=il,
+            ilce=ilce,
+            vergi_no=vergi_no,
+            notlar=notlar,
+        )
+        session.add(m)
+        session.flush()
+        session.expunge(m)
+        return m
+
+
+def musteri_guncelle(musteri_id: int, **kwargs) -> Musteri:
+    with get_session() as session:
+        m = session.query(Musteri).filter_by(id=musteri_id).first()
+        for alan, deger in kwargs.items():
+            setattr(m, alan, deger)
+        session.flush()
+        session.expunge(m)
+        return m
+
+
+def musteri_pasife_al(musteri_id: int) -> None:
+    with get_session() as session:
+        m = session.query(Musteri).filter_by(id=musteri_id).first()
+        m.aktif = False
+        m.silinme_tarihi = datetime.now()
+
+
+def bakiye_yukle(musteri_id: int, tutar: Decimal, odeme_araci: str, admin_id: int, aciklama: str = "") -> None:
+    """Müşterinin bakiyesini artırır ve BAKIYE_YUKLEME ödeme kaydı oluşturur."""
+    if tutar <= 0:
+        raise ValueError("Tutar sıfırdan büyük olmalıdır.")
+    with get_session() as session:
+        m = session.query(Musteri).filter_by(id=musteri_id).first()
+        m.bakiye = Decimal(str(m.bakiye)) + tutar
+        odeme = Odeme(
+            musteri_id=musteri_id,
+            islem_tipi="BAKIYE_YUKLEME",
+            tutar=tutar,
+            odeme_araci=odeme_araci,
+            tarih=datetime.now(),
+            aciklama=aciklama or "Bakiye yükleme",
+            admin_id=admin_id,
+        )
+        session.add(odeme)
+
+
+def tahsilat_al(musteri_id: int, tutar: Decimal, odeme_araci: str, admin_id: int, aciklama: str = "") -> None:
+    """Müşterinin borcunu düşürür ve TAHSILAT ödeme kaydı oluşturur."""
+    if tutar <= 0:
+        raise ValueError("Tutar sıfırdan büyük olmalıdır.")
+    with get_session() as session:
+        m = session.query(Musteri).filter_by(id=musteri_id).first()
+        m.borc = max(Decimal("0.00"), Decimal(str(m.borc)) - tutar)
+        odeme = Odeme(
+            musteri_id=musteri_id,
+            islem_tipi="TAHSILAT",
+            tutar=tutar,
+            odeme_araci=odeme_araci,
+            tarih=datetime.now(),
+            aciklama=aciklama or "Borç tahsilatı",
+            admin_id=admin_id,
+        )
+        session.add(odeme)
+
+
+def cari_hareketler(musteri_id: int, baslangic=None, bitis=None) -> list[dict]:
+    """Müşterinin tüm cari hareketlerini kronolojik sıraya döner."""
+    with get_session() as session:
+        from sqlalchemy import or_
+        from veritabani.modeller import SatisFisi, IadeFisi
+
+        # Ödemeler (tahsilat, bakiye yükleme, satış borcu, iade alacak)
+        odeme_q = session.query(Odeme).filter(Odeme.musteri_id == musteri_id)
+        if baslangic:
+            odeme_q = odeme_q.filter(Odeme.tarih >= baslangic)
+        if bitis:
+            odeme_q = odeme_q.filter(Odeme.tarih <= bitis)
+
+        satirlar = []
+        for o in odeme_q.all():
+            borc_art = Decimal("0")
+            alacak_art = Decimal("0")
+            if o.islem_tipi == "SATIS_BORC":
+                borc_art = Decimal(str(o.tutar))
+            elif o.islem_tipi in ("TAHSILAT", "BAKIYE_YUKLEME", "IADE_ALACAK"):
+                alacak_art = Decimal(str(o.tutar))
+            satirlar.append({
+                "tarih": o.tarih,
+                "tip": o.islem_tipi,
+                "belge": o.aciklama or "",
+                "borc": borc_art,
+                "alacak": alacak_art,
+                "aciklama": o.aciklama or "",
+            })
+
+        satirlar.sort(key=lambda x: x["tarih"])
+        return satirlar
