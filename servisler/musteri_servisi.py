@@ -146,7 +146,6 @@ def cari_hareketler(musteri_id: int, baslangic=None, bitis=None) -> list[dict]:
         # Tüm satış fişleri (nakit, kart, bakiye, veresiye hepsi görünsün)
         fis_q = session.query(SatisFisi).filter(
             SatisFisi.musteri_id == musteri_id,
-            SatisFisi.aktif == True,
         )
         if baslangic:
             fis_q = fis_q.filter(SatisFisi.tarih >= baslangic)
