@@ -1,37 +1,34 @@
-"""A4 satış fişi PDF üretimi — reportlab."""
+"""A4 satış fişi PDF üretimi — reportlab, Türkçe karakter destekli."""
 
 import io
-from decimal import Decimal
 from pathlib import Path
 
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.units import cm
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.platypus import (
-    SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, HRFlowable,
+    HRFlowable, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle,
 )
 
+# Windows Arial — Türkçe karakterleri destekler
+_FONT_DIZIN = Path("C:/Windows/Fonts")
+_FONT_NORMAL = "Arial-TR"
+_FONT_BOLD = "Arial-TR-Bold"
+
+pdfmetrics.registerFont(TTFont(_FONT_NORMAL, _FONT_DIZIN / "arial.ttf"))
+pdfmetrics.registerFont(TTFont(_FONT_BOLD, _FONT_DIZIN / "arialbd.ttf"))
 
 _PARA_STILI = ParagraphStyle(
-    "para",
-    fontName="Helvetica",
-    fontSize=9,
-    leading=12,
+    "para", fontName=_FONT_NORMAL, fontSize=9, leading=12,
 )
 _BASLIK_STILI = ParagraphStyle(
-    "baslik",
-    fontName="Helvetica-Bold",
-    fontSize=14,
-    leading=18,
-    alignment=1,
+    "baslik", fontName=_FONT_BOLD, fontSize=14, leading=18, alignment=1,
 )
 _ORTA_STILI = ParagraphStyle(
-    "orta",
-    fontName="Helvetica",
-    fontSize=9,
-    leading=12,
-    alignment=1,
+    "orta", fontName=_FONT_NORMAL, fontSize=9, leading=12, alignment=1,
 )
 
 
@@ -73,10 +70,10 @@ def fis_pdf_olustur(fis_detay: dict, firma_ayarlari: dict) -> bytes:
     ]
     bilgi_tablo = Table(bilgi_data, colWidths=[3 * cm, 7 * cm, 3 * cm, 4 * cm])
     bilgi_tablo.setStyle(TableStyle([
-        ("FONTNAME", (0, 0), (-1, -1), "Helvetica"),
+        ("FONTNAME", (0, 0), (-1, -1), _FONT_NORMAL),
         ("FONTSIZE", (0, 0), (-1, -1), 9),
-        ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
-        ("FONTNAME", (2, 0), (2, -1), "Helvetica-Bold"),
+        ("FONTNAME", (0, 0), (0, -1), _FONT_BOLD),
+        ("FONTNAME", (2, 0), (2, -1), _FONT_BOLD),
         ("VALIGN", (0, 0), (-1, -1), "TOP"),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
     ]))
@@ -86,9 +83,9 @@ def fis_pdf_olustur(fis_detay: dict, firma_ayarlari: dict) -> bytes:
     elemanlar.append(Spacer(1, 0.3 * cm))
 
     # Kalemler tablosu
+    from yardimcilar.formatlayici import miktar_formatla, para_formatla
     kalem_sutunlari = ["Ürün Kodu", "Ürün Adı", "Miktar", "Birim Fiyat", "KDV%", "Satır Toplam"]
     kalem_data = [kalem_sutunlari]
-    from yardimcilar.formatlayici import miktar_formatla, para_formatla
     for k in fis_detay["kalemler"]:
         kalem_data.append([
             k["urun_kodu"],
@@ -106,9 +103,9 @@ def fis_pdf_olustur(fis_detay: dict, firma_ayarlari: dict) -> bytes:
     kalem_tablo.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#333333")),
         ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("FONTNAME", (0, 0), (-1, 0), _FONT_BOLD),
         ("FONTSIZE", (0, 0), (-1, -1), 8.5),
-        ("FONTNAME", (0, 1), (-1, -1), "Helvetica"),
+        ("FONTNAME", (0, 1), (-1, -1), _FONT_NORMAL),
         ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f5f5f5")]),
         ("GRID", (0, 0), (-1, -1), 0.3, colors.grey),
         ("ALIGN", (2, 0), (-1, -1), "RIGHT"),
@@ -127,10 +124,10 @@ def fis_pdf_olustur(fis_detay: dict, firma_ayarlari: dict) -> bytes:
     ]
     toplam_tablo = Table(toplam_data, colWidths=[10 * cm, 4 * cm, 3 * cm])
     toplam_tablo.setStyle(TableStyle([
-        ("FONTNAME", (0, 0), (-1, -1), "Helvetica"),
+        ("FONTNAME", (0, 0), (-1, -1), _FONT_NORMAL),
         ("FONTSIZE", (0, 0), (-1, -1), 9),
-        ("FONTNAME", (1, 0), (-1, -1), "Helvetica-Bold"),
-        ("FONTNAME", (0, 2), (-1, 2), "Helvetica-Bold"),
+        ("FONTNAME", (1, 0), (-1, -1), _FONT_BOLD),
+        ("FONTNAME", (0, 2), (-1, 2), _FONT_BOLD),
         ("FONTSIZE", (0, 2), (-1, 2), 10),
         ("ALIGN", (1, 0), (-1, -1), "RIGHT"),
         ("LINEABOVE", (1, 2), (-1, 2), 0.5, colors.black),

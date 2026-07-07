@@ -354,6 +354,7 @@ class SatisEkrani(QWidget):
         try:
             detay = satis_servisi.fis_detay(fis_id) if fis_id else {}
             if not detay:
+                QMessageBox.information(self, "Başarılı", "Satış kaydedildi.")
                 return
             with get_session() as session:
                 ayarlar = session.query(FirmaAyarlari).filter_by(id=1).first()
@@ -363,14 +364,30 @@ class SatisEkrani(QWidget):
                     "telefon": ayarlar.telefon if ayarlar else "",
                 }
             from yardimcilar.pdf_fis import fis_pdf_olustur
-            pdf_bytes = fis_pdf_olustur(detay, firma)
-            tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
-            tmp.write(pdf_bytes)
-            tmp.close()
-            os.startfile(tmp.name)
-            QMessageBox.information(self, "Başarılı", f"Satış fişi oluşturuldu: {detay['fis_no']}")
+            self._son_pdf_bytes = fis_pdf_olustur(detay, firma)
+            self._son_fis_no = detay["fis_no"]
+
+            msg = QMessageBox(self)
+            msg.setWindowTitle("Satış Tamamlandı")
+            msg.setText(f"Fiş kaydedildi: <b>{detay['fis_no']}</b>")
+            msg.setInformativeText(f"Toplam: {para_formatla(detay['genel_toplam'])}")
+            msg.setIcon(QMessageBox.Icon.Information)
+            yazdir_btn = msg.addButton("Fişi Görüntüle / Yazdır", QMessageBox.ButtonRole.ActionRole)
+            msg.addButton("Kapat", QMessageBox.ButtonRole.RejectRole)
+            msg.exec()
+            if msg.clickedButton() == yazdir_btn:
+                self._pdf_ac()
         except Exception as e:
             QMessageBox.warning(self, "PDF Hatası", f"PDF oluşturulamadı: {e}")
+
+    def _pdf_ac(self):
+        if not hasattr(self, "_son_pdf_bytes"):
+            return
+        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf",
+                                          prefix=f"{self._son_fis_no}_")
+        tmp.write(self._son_pdf_bytes)
+        tmp.close()
+        os.startfile(tmp.name)
 
 
 class KarmaOdemeDialog(QDialog):
