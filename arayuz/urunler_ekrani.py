@@ -227,7 +227,6 @@ class StokGecmisiDialog(QDialog):
         gecmis = stok_servisi.urun_stok_gecmisi(urun_id)
 
         sutunlar = ["Tarih", "Hareket", "Miktar", "Birim Fiyat", "Tedarikçi", "Fiş No", "Açıklama", "Admin"]
-        model = QAbstractTableModel()
 
         class _M(QAbstractTableModel):
             def __init__(self, data):

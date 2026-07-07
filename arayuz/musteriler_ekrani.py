@@ -18,7 +18,7 @@ _SUTUNLAR = [
     ("Soyad", "soyad"),
     ("Firma", "firma_adi"),
     ("Telefon", "telefon"),
-    ("İl", "il"),
+    ("Bölge", "bolge"),
     ("Bakiye", "bakiye"),
     ("Borç", "borc"),
 ]
@@ -182,7 +182,7 @@ class MusteriDialog(QDialog):
         self.firma_adi = QLineEdit()
         self.telefon = QLineEdit()
         self.adres = QLineEdit()
-        self.il = QLineEdit()
+        self.bolge = QLineEdit()
         self.ilce = QLineEdit()
         self.vergi_no = QLineEdit()
         self.notlar = QLineEdit()
@@ -191,7 +191,7 @@ class MusteriDialog(QDialog):
         form.addRow("Firma Adı:", self.firma_adi)
         form.addRow("Telefon:", self.telefon)
         form.addRow("Adres:", self.adres)
-        form.addRow("İl:", self.il)
+        form.addRow("Bölge:", self.bolge)
         form.addRow("İlçe:", self.ilce)
         form.addRow("Vergi No:", self.vergi_no)
         form.addRow("Notlar:", self.notlar)
@@ -212,7 +212,7 @@ class MusteriDialog(QDialog):
         self.firma_adi.setText(m.firma_adi or "")
         self.telefon.setText(m.telefon or "")
         self.adres.setText(m.adres or "")
-        self.il.setText(m.il or "")
+        self.bolge.setText(m.bolge or "")
         self.ilce.setText(m.ilce or "")
         self.vergi_no.setText(m.vergi_no or "")
         self.notlar.setText(m.notlar or "")
@@ -228,7 +228,7 @@ class MusteriDialog(QDialog):
             firma_adi=self.firma_adi.text().strip() or None,
             telefon=self.telefon.text().strip() or None,
             adres=self.adres.text().strip() or None,
-            il=self.il.text().strip() or None,
+            bolge=self.bolge.text().strip() or None,
             ilce=self.ilce.text().strip() or None,
             vergi_no=self.vergi_no.text().strip() or None,
             notlar=self.notlar.text().strip() or None,

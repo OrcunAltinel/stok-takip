@@ -36,7 +36,7 @@ class Musteri(Base):
     firma_adi = Column(String(150), nullable=True)
     telefon = Column(String(20), nullable=True)
     adres = Column(Text, nullable=True)
-    il = Column(String(50), nullable=True)
+    bolge = Column(String(50), nullable=True)
     ilce = Column(String(50), nullable=True)
     vergi_no = Column(String(20), nullable=True)
     bakiye = Column(Numeric(precision=12, scale=2), default=Decimal("0.00"), nullable=False)
