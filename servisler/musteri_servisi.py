@@ -164,6 +164,7 @@ def cari_hareketler(musteri_id: int, baslangic=None, bitis=None) -> list[dict]:
                 "borc": borc_art,
                 "alacak": alacak_art,
                 "aciklama": o.aciklama or "",
+                "fis_id": o.iliskili_fis_id,
             })
 
         satirlar.sort(key=lambda x: x["tarih"])

@@ -12,9 +12,9 @@ from PySide6.QtWidgets import (
 
 from arayuz.bilesenler.para_girisi import ParaGirisi
 from arayuz.bilesenler.tarih_filtresi import TarihFiltresi
-from servisler import musteri_servisi
+from servisler import musteri_servisi, satis_servisi
 from veritabani.modeller import Admin, Musteri
-from yardimcilar.formatlayici import para_formatla, tarih_formatla
+from yardimcilar.formatlayici import miktar_formatla, para_formatla, tarih_formatla
 
 _SUTUNLAR = ["Tarih", "İşlem Tipi", "Belge/Açıklama", "Borç", "Alacak"]
 _TIP_ETIKET = {
@@ -113,6 +113,7 @@ class CariEkstreEkrani(QDialog):
         self.tablo.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.tablo.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
         self.tablo.horizontalHeader().setStretchLastSection(True)
+        self.tablo.doubleClicked.connect(self._detay_goster)
         layout.addWidget(self.tablo, 1)
 
         # Toplamlar
@@ -160,6 +161,16 @@ class CariEkstreEkrani(QDialog):
 
     def _filtrele(self, bas, bit):
         self.yenile(bas, bit)
+
+    def _detay_goster(self, idx):
+        satir = self.model._veri[idx.row()]
+        fis_id = satir.get("fis_id")
+        if not fis_id:
+            return
+        detay = satis_servisi.fis_detay(fis_id)
+        if not detay:
+            return
+        _FisDetayDialog(detay, self).exec()
 
     def _tahsilat_al(self):
         dlg = _TahsilatDialog(self.musteri, self.admin, self)
@@ -263,3 +274,69 @@ class _BakiyeYukleDialog(QDialog):
             self.accept()
         except Exception as e:
             self.hata.setText(str(e))
+
+
+class _FisDetayDialog(QDialog):
+    def __init__(self, detay: dict, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle(f"Fiş Detayı — {detay['fis_no']}")
+        self.setMinimumSize(700, 420)
+        self._kur(detay)
+
+    def _kur(self, d: dict):
+        from PySide6.QtWidgets import QTableWidget, QTableWidgetItem
+        layout = QVBoxLayout(self)
+
+        # Üst bilgi
+        bilgi = QHBoxLayout()
+        bilgi.addWidget(QLabel(f"<b>Fiş No:</b> {d['fis_no']}"))
+        bilgi.addWidget(QLabel(f"<b>Tarih:</b> {tarih_formatla(d['tarih'])}"))
+        bilgi.addWidget(QLabel(f"<b>Ödeme:</b> {d['odeme_tipi']}"))
+        bilgi.addStretch()
+        layout.addLayout(bilgi)
+
+        # Ürün tablosu
+        sutunlar = ["Ürün Kodu", "Ürün Adı", "Miktar", "Birim Fiyat", "KDV%", "Satır Toplam"]
+        tablo = QTableWidget(len(d["kalemler"]), len(sutunlar))
+        tablo.setHorizontalHeaderLabels(sutunlar)
+        tablo.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        tablo.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        tablo.setAlternatingRowColors(True)
+        tablo.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
+        tablo.horizontalHeader().setStretchLastSection(True)
+
+        for r, k in enumerate(d["kalemler"]):
+            satirlar = [
+                k["urun_kodu"],
+                k["urun_adi"],
+                miktar_formatla(k["miktar"]),
+                para_formatla(k["birim_fiyat"]),
+                f"%{k['kdv_orani']}",
+                para_formatla(k["satir_toplam"]),
+            ]
+            for c, deger in enumerate(satirlar):
+                item = QTableWidgetItem(deger)
+                if c in (2, 3, 4, 5):
+                    item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+                tablo.setItem(r, c, item)
+
+        layout.addWidget(tablo, 1)
+
+        # Toplamlar
+        top_layout = QHBoxLayout()
+        top_layout.addStretch()
+        for etiket, tutar in [
+            ("Ara Toplam", d["ara_toplam"]),
+            ("KDV", d["kdv_toplam"]),
+            ("Genel Toplam", d["genel_toplam"]),
+        ]:
+            lbl = QLabel(f"<b>{etiket}:</b> {para_formatla(tutar)}")
+            top_layout.addWidget(lbl)
+        layout.addLayout(top_layout)
+
+        if d.get("aciklama"):
+            layout.addWidget(QLabel(f"Not: {d['aciklama']}"))
+
+        kapat = QPushButton("Kapat")
+        kapat.clicked.connect(self.accept)
+        layout.addWidget(kapat)
