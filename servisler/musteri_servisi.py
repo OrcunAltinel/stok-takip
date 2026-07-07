@@ -99,22 +99,40 @@ def musteri_pasife_al(musteri_id: int) -> None:
 
 
 def bakiye_yukle(musteri_id: int, tutar: Decimal, odeme_araci: str, admin_id: int, aciklama: str = "") -> None:
-    """Müşterinin bakiyesini artırır ve BAKIYE_YUKLEME ödeme kaydı oluşturur."""
+    """Ödeme alır. Varsa önce borcu kapatır, kalan bakiye olarak eklenir."""
     if tutar <= 0:
         raise ValueError("Tutar sıfırdan büyük olmalıdır.")
     with get_session() as session:
         m = session.query(Musteri).filter_by(id=musteri_id).first()
-        m.bakiye = Decimal(str(m.bakiye)) + tutar
-        odeme = Odeme(
-            musteri_id=musteri_id,
-            islem_tipi="BAKIYE_YUKLEME",
-            tutar=tutar,
-            odeme_araci=odeme_araci,
-            tarih=datetime.now(),
-            aciklama=aciklama or "Bakiye yükleme",
-            admin_id=admin_id,
-        )
-        session.add(odeme)
+        tutar = Decimal(str(tutar))
+        borc = Decimal(str(m.borc))
+        kalan = tutar
+
+        if borc > 0:
+            borc_odeme = min(kalan, borc)
+            m.borc = borc - borc_odeme
+            kalan -= borc_odeme
+            session.add(Odeme(
+                musteri_id=musteri_id,
+                islem_tipi="TAHSILAT",
+                tutar=borc_odeme,
+                odeme_araci=odeme_araci,
+                tarih=datetime.now(),
+                aciklama=aciklama or "Borç kapatma",
+                admin_id=admin_id,
+            ))
+
+        if kalan > 0:
+            m.bakiye = Decimal(str(m.bakiye)) + kalan
+            session.add(Odeme(
+                musteri_id=musteri_id,
+                islem_tipi="BAKIYE_YUKLEME",
+                tutar=kalan,
+                odeme_araci=odeme_araci,
+                tarih=datetime.now(),
+                aciklama=aciklama or "Bakiye yükleme",
+                admin_id=admin_id,
+            ))
 
 
 def tahsilat_al(musteri_id: int, tutar: Decimal, odeme_araci: str, admin_id: int, aciklama: str = "") -> None:
@@ -152,16 +170,20 @@ def cari_hareketler(musteri_id: int, baslangic=None, bitis=None) -> list[dict]:
         if bitis:
             fis_q = fis_q.filter(SatisFisi.tarih <= bitis)
 
+        _ODEME_ETIKET = {
+            "NAKIT": "Nakit", "KART": "Kart",
+            "BAKIYE": "Bakiyeden", "VERESIYE": "Veresiye", "KARMA": "Karma",
+        }
         for fis in fis_q.all():
-            # Sadece veresiye satışlarda borç doğar; diğerleri nötr gösterilir
             borc = Decimal(str(fis.genel_toplam)) if fis.odeme_tipi == "VERESIYE" else Decimal("0")
+            odeme_str = _ODEME_ETIKET.get(fis.odeme_tipi, fis.odeme_tipi)
             satirlar.append({
                 "tarih": fis.tarih,
                 "tip": "SATIS",
+                "display_tip": f"Satış ({odeme_str})",
                 "belge": fis.fis_no,
                 "borc": borc,
-                "alacak": Decimal("0"),
-                "aciklama": f"{fis.fis_no} — {fis.odeme_tipi}",
+                "tahsilat": Decimal("0"),
                 "fis_id": fis.id,
             })
 
@@ -175,14 +197,19 @@ def cari_hareketler(musteri_id: int, baslangic=None, bitis=None) -> list[dict]:
         if bitis:
             odeme_q = odeme_q.filter(Odeme.tarih <= bitis)
 
+        _TIP_ETIKET = {
+            "TAHSILAT": "Borç Tahsilatı",
+            "BAKIYE_YUKLEME": "Bakiye Yükleme",
+            "IADE_ALACAK": "İade Alacağı",
+        }
         for o in odeme_q.all():
             satirlar.append({
                 "tarih": o.tarih,
                 "tip": o.islem_tipi,
+                "display_tip": _TIP_ETIKET.get(o.islem_tipi, o.islem_tipi),
                 "belge": o.aciklama or "",
                 "borc": Decimal("0"),
-                "alacak": Decimal(str(o.tutar)),
-                "aciklama": o.aciklama or "",
+                "tahsilat": Decimal(str(o.tutar)),
                 "fis_id": None,
             })
 

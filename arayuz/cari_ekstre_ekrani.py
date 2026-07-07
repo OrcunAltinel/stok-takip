@@ -1,13 +1,14 @@
-"""Cari ekstre ekranı — müşterinin tüm hareketleri + borç/alacak toplamları."""
+"""Cari ekstre ekranı — müşterinin tüm hareketleri."""
 
 from decimal import Decimal
 
 from PySide6.QtCore import QAbstractTableModel, QModelIndex, Qt
-from PySide6.QtGui import QColor
+from PySide6.QtGui import QColor, QFont
 from PySide6.QtWidgets import (
     QAbstractItemView, QComboBox, QDialog, QDialogButtonBox, QFormLayout,
     QGroupBox, QHBoxLayout, QHeaderView, QLabel, QLineEdit, QMessageBox,
-    QPushButton, QTableView, QVBoxLayout, QWidget,
+    QPushButton, QTableView, QTableWidget, QTableWidgetItem,
+    QVBoxLayout, QWidget,
 )
 
 from arayuz.bilesenler.para_girisi import ParaGirisi
@@ -16,14 +17,7 @@ from servisler import musteri_servisi, satis_servisi
 from veritabani.modeller import Admin, Musteri
 from yardimcilar.formatlayici import miktar_formatla, para_formatla, tarih_formatla
 
-_SUTUNLAR = ["Tarih", "İşlem Tipi", "Belge/Açıklama", "Borç", "Alacak"]
-_TIP_ETIKET = {
-    "SATIS": "Satış",
-    "SATIS_BORC": "Satış Borcu",
-    "TAHSILAT": "Tahsilat",
-    "BAKIYE_YUKLEME": "Bakiye Yükleme",
-    "IADE_ALACAK": "İade Alacağı",
-}
+_SUTUNLAR = ["Tarih", "İşlem", "Fiş / Açıklama", "Borç (₺)", "Tahsilat / Alacak (₺)"]
 
 
 class CariModel(QAbstractTableModel):
@@ -45,6 +39,10 @@ class CariModel(QAbstractTableModel):
     def headerData(self, s, o, role=Qt.ItemDataRole.DisplayRole):
         if role == Qt.ItemDataRole.DisplayRole and o == Qt.Orientation.Horizontal:
             return _SUTUNLAR[s]
+        if role == Qt.ItemDataRole.FontRole and o == Qt.Orientation.Horizontal:
+            f = QFont()
+            f.setBold(True)
+            return f
 
     def data(self, idx, role=Qt.ItemDataRole.DisplayRole):
         if not idx.isValid():
@@ -56,23 +54,24 @@ class CariModel(QAbstractTableModel):
             if col == 0:
                 return tarih_formatla(r["tarih"])
             if col == 1:
-                return _TIP_ETIKET.get(r["tip"], r["tip"])
+                return r.get("display_tip", r["tip"])
             if col == 2:
-                return r.get("aciklama", "")
+                return r.get("belge", "")
             if col == 3:
-                return para_formatla(r["borc"]) if r["borc"] else ""
+                return para_formatla(r["borc"]) if r["borc"] else "—"
             if col == 4:
-                return para_formatla(r["alacak"]) if r["alacak"] else ""
+                return para_formatla(r["tahsilat"]) if r["tahsilat"] else "—"
 
         if role == Qt.ItemDataRole.ForegroundRole:
             if col == 3 and r["borc"]:
                 return QColor("#f38ba8")
-            if col == 4 and r["alacak"]:
+            if col == 4 and r["tahsilat"]:
                 return QColor("#a6e3a1")
 
         if role == Qt.ItemDataRole.TextAlignmentRole:
             if col in (3, 4):
                 return Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
+            return Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft
 
         if role == Qt.ItemDataRole.ToolTipRole:
             if r.get("fis_id"):
@@ -86,8 +85,8 @@ class CariEkstreEkrani(QDialog):
         super().__init__(parent)
         self.musteri = musteri
         self.admin = admin
-        self.setWindowTitle(f"Cari Ekstre — {musteri.ad} {musteri.soyad}")
-        self.setMinimumSize(860, 580)
+        self.setWindowTitle(f"Hesap Hareketleri — {musteri.ad} {musteri.soyad}")
+        self.setMinimumSize(920, 600)
         self._kur()
         self.yenile()
 
@@ -97,7 +96,9 @@ class CariEkstreEkrani(QDialog):
 
         # Müşteri bilgi satırı
         bilgi = QHBoxLayout()
-        bilgi.addWidget(QLabel(f"<b>{self.musteri.ad} {self.musteri.soyad}</b>"))
+        isim = QLabel(f"<b>{self.musteri.ad} {self.musteri.soyad}</b>")
+        isim.setObjectName("baslik")
+        bilgi.addWidget(isim)
         if self.musteri.firma_adi:
             bilgi.addWidget(QLabel(f"| {self.musteri.firma_adi}"))
         if self.musteri.telefon:
@@ -122,30 +123,39 @@ class CariEkstreEkrani(QDialog):
         self.tablo.doubleClicked.connect(self._detay_goster)
         layout.addWidget(self.tablo, 1)
 
-        # Toplamlar
-        toplam_grup = QGroupBox("Özet")
-        toplam_layout = QHBoxLayout(toplam_grup)
-        self.borc_toplam_label = QLabel("Borç Toplamı: —")
-        self.alacak_toplam_label = QLabel("Alacak Toplamı: —")
-        self.bakiye_label = QLabel("Güncel Bakiye: —")
-        self.borc_label = QLabel("Güncel Borç: —")
-        for w in [self.borc_toplam_label, self.alacak_toplam_label, self.bakiye_label, self.borc_label]:
-            toplam_layout.addWidget(w)
-        toplam_layout.addStretch()
-        layout.addWidget(toplam_grup)
+        # Özet kutusu
+        ozet = QGroupBox("Hesap Özeti")
+        ozet_layout = QHBoxLayout(ozet)
+        ozet_layout.setSpacing(24)
+
+        self.lbl_donem_borc = QLabel()
+        self.lbl_donem_tahsilat = QLabel()
+        self.lbl_guncel_borc = QLabel()
+        self.lbl_guncel_bakiye = QLabel()
+
+        for lbl in [self.lbl_donem_borc, self.lbl_donem_tahsilat,
+                    self.lbl_guncel_borc, self.lbl_guncel_bakiye]:
+            ozet_layout.addWidget(lbl)
+        ozet_layout.addStretch()
+        layout.addWidget(ozet)
 
         # Butonlar
         btn_satir = QHBoxLayout()
         tahsilat_btn = QPushButton("Tahsilat Al")
         tahsilat_btn.setObjectName("btn_basari")
         tahsilat_btn.clicked.connect(self._tahsilat_al)
-        bakiye_btn = QPushButton("Bakiye Yükle")
-        bakiye_btn.clicked.connect(self._bakiye_yukle)
+        tahsilat_btn.setToolTip("Veresiye borcunu tahsil et")
+
+        odeme_btn = QPushButton("Ödeme / Bakiye Yükle")
+        odeme_btn.clicked.connect(self._bakiye_yukle)
+        odeme_btn.setToolTip("Ödeme al — borç varsa önce kapatılır, kalan bakiye olarak eklenir")
+
         kapat_btn = QPushButton("Kapat")
         kapat_btn.setObjectName("btn_iptal")
         kapat_btn.clicked.connect(self.accept)
+
         btn_satir.addWidget(tahsilat_btn)
-        btn_satir.addWidget(bakiye_btn)
+        btn_satir.addWidget(odeme_btn)
         btn_satir.addStretch()
         btn_satir.addWidget(kapat_btn)
         layout.addLayout(btn_satir)
@@ -158,12 +168,23 @@ class CariEkstreEkrani(QDialog):
         hareketler = musteri_servisi.cari_hareketler(self.musteri.id, baslangic, bitis)
         self.model.yenile(hareketler)
 
-        borc_top = sum(h["borc"] for h in hareketler)
-        alacak_top = sum(h["alacak"] for h in hareketler)
-        self.borc_toplam_label.setText(f"Borç: {para_formatla(borc_top)}")
-        self.alacak_toplam_label.setText(f"Alacak: {para_formatla(alacak_top)}")
-        self.bakiye_label.setText(f"Bakiye: {para_formatla(self.musteri.bakiye)}")
-        self.borc_label.setText(f"Borç (Güncel): {para_formatla(self.musteri.borc)}")
+        donem_borc = sum(h["borc"] for h in hareketler)
+        donem_tahsilat = sum(h["tahsilat"] for h in hareketler)
+
+        self.lbl_donem_borc.setText(
+            f"<span style='color:#f38ba8'><b>Dönem Borç:</b> {para_formatla(donem_borc)}</span>"
+        )
+        self.lbl_donem_tahsilat.setText(
+            f"<span style='color:#a6e3a1'><b>Dönem Tahsilat:</b> {para_formatla(donem_tahsilat)}</span>"
+        )
+        borc_renk = "#f38ba8" if self.musteri.borc > 0 else "#a6e3a1"
+        self.lbl_guncel_borc.setText(
+            f"<span style='color:{borc_renk}'><b>Güncel Borç:</b> {para_formatla(self.musteri.borc)}</span>"
+        )
+        bakiye_renk = "#a6e3a1" if self.musteri.bakiye > 0 else "#cdd6f4"
+        self.lbl_guncel_bakiye.setText(
+            f"<span style='color:{bakiye_renk}'><b>Bakiye:</b> {para_formatla(self.musteri.bakiye)}</span>"
+        )
 
     def _filtrele(self, bas, bit):
         self.yenile(bas, bit)
@@ -195,24 +216,29 @@ class _TahsilatDialog(QDialog):
         self.musteri = musteri
         self.admin = admin
         self.setWindowTitle("Tahsilat Al")
-        self.setFixedSize(380, 260)
+        self.setFixedSize(400, 260)
         self._kur()
 
     def _kur(self):
         layout = QVBoxLayout(self)
         form = QFormLayout()
+        form.setSpacing(10)
         self.tutar_edit = ParaGirisi()
         self.arac_combo = QComboBox()
-        self.arac_combo.addItems(["NAKIT", "KART"])
+        self.arac_combo.addItems(["NAKİT", "KART"])
         self.aciklama_edit = QLineEdit()
-        form.addRow(f"Mevcut Borç:", QLabel(para_formatla(self.musteri.borc)))
+
+        borc_lbl = QLabel(f"<b style='color:#f38ba8'>{para_formatla(self.musteri.borc)}</b>")
+        form.addRow("Mevcut Borç:", borc_lbl)
         form.addRow("Tahsilat Tutarı:", self.tutar_edit)
         form.addRow("Ödeme Aracı:", self.arac_combo)
         form.addRow("Açıklama:", self.aciklama_edit)
         layout.addLayout(form)
+
         self.hata = QLabel("")
         self.hata.setObjectName("uyari_etiket")
         layout.addWidget(self.hata)
+
         butonlar = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel
         )
@@ -240,26 +266,38 @@ class _BakiyeYukleDialog(QDialog):
         super().__init__(parent)
         self.musteri = musteri
         self.admin = admin
-        self.setWindowTitle("Bakiye Yükle")
-        self.setFixedSize(380, 240)
+        self.setWindowTitle("Ödeme / Bakiye Yükle")
+        self.setFixedSize(420, 300)
         self._kur()
 
     def _kur(self):
-        from PySide6.QtWidgets import QLineEdit
         layout = QVBoxLayout(self)
         form = QFormLayout()
+        form.setSpacing(10)
         self.tutar_edit = ParaGirisi()
         self.arac_combo = QComboBox()
-        self.arac_combo.addItems(["NAKIT", "KART"])
+        self.arac_combo.addItems(["NAKİT", "KART"])
         self.aciklama_edit = QLineEdit()
-        form.addRow(f"Mevcut Bakiye:", QLabel(para_formatla(self.musteri.bakiye)))
+
+        if self.musteri.borc > 0:
+            borc_lbl = QLabel(f"<b style='color:#f38ba8'>{para_formatla(self.musteri.borc)}</b>")
+            form.addRow("Mevcut Borç:", borc_lbl)
+            bilgi = QLabel("⚠ Borç varsa önce kapatılır, kalan bakiye olarak eklenir.")
+            bilgi.setObjectName("uyari_etiket")
+            layout.addWidget(bilgi)
+        else:
+            bakiye_lbl = QLabel(f"<b style='color:#a6e3a1'>{para_formatla(self.musteri.bakiye)}</b>")
+            form.addRow("Mevcut Bakiye:", bakiye_lbl)
+
         form.addRow("Yüklenecek Tutar:", self.tutar_edit)
         form.addRow("Ödeme Aracı:", self.arac_combo)
         form.addRow("Açıklama:", self.aciklama_edit)
         layout.addLayout(form)
+
         self.hata = QLabel("")
         self.hata.setObjectName("uyari_etiket")
         layout.addWidget(self.hata)
+
         butonlar = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel
         )
@@ -290,10 +328,8 @@ class _FisDetayDialog(QDialog):
         self._kur(detay)
 
     def _kur(self, d: dict):
-        from PySide6.QtWidgets import QTableWidget, QTableWidgetItem
         layout = QVBoxLayout(self)
 
-        # Üst bilgi
         bilgi = QHBoxLayout()
         bilgi.addWidget(QLabel(f"<b>Fiş No:</b> {d['fis_no']}"))
         bilgi.addWidget(QLabel(f"<b>Tarih:</b> {tarih_formatla(d['tarih'])}"))
@@ -301,7 +337,6 @@ class _FisDetayDialog(QDialog):
         bilgi.addStretch()
         layout.addLayout(bilgi)
 
-        # Ürün tablosu
         sutunlar = ["Ürün Kodu", "Ürün Adı", "Miktar", "Birim Fiyat", "KDV%", "Satır Toplam"]
         tablo = QTableWidget(len(d["kalemler"]), len(sutunlar))
         tablo.setHorizontalHeaderLabels(sutunlar)
@@ -312,23 +347,23 @@ class _FisDetayDialog(QDialog):
         tablo.horizontalHeader().setStretchLastSection(True)
 
         for r, k in enumerate(d["kalemler"]):
-            satirlar = [
-                k["urun_kodu"],
-                k["urun_adi"],
+            degerler = [
+                k["urun_kodu"], k["urun_adi"],
                 miktar_formatla(k["miktar"]),
                 para_formatla(k["birim_fiyat"]),
                 f"%{k['kdv_orani']}",
                 para_formatla(k["satir_toplam"]),
             ]
-            for c, deger in enumerate(satirlar):
-                item = QTableWidgetItem(deger)
+            for c, val in enumerate(degerler):
+                item = QTableWidgetItem(val)
                 if c in (2, 3, 4, 5):
-                    item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+                    item.setTextAlignment(
+                        Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
+                    )
                 tablo.setItem(r, c, item)
 
         layout.addWidget(tablo, 1)
 
-        # Toplamlar
         top_layout = QHBoxLayout()
         top_layout.addStretch()
         for etiket, tutar in [
@@ -336,8 +371,7 @@ class _FisDetayDialog(QDialog):
             ("KDV", d["kdv_toplam"]),
             ("Genel Toplam", d["genel_toplam"]),
         ]:
-            lbl = QLabel(f"<b>{etiket}:</b> {para_formatla(tutar)}")
-            top_layout.addWidget(lbl)
+            top_layout.addWidget(QLabel(f"<b>{etiket}:</b> {para_formatla(tutar)}"))
         layout.addLayout(top_layout)
 
         if d.get("aciklama"):
