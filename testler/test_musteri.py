@@ -1,50 +1,50 @@
-"""Müşteri işlemleri testleri."""
+"""Müşteri ve KARMA ödeme kırılımı testleri."""
 
 from decimal import Decimal
 import pytest
 
-from veritabani.modeller import Musteri, Odeme
+from veritabani.modeller import Musteri, Odeme, SatisFisi
 
 
 def _musteri_ekle(session) -> Musteri:
-    m = Musteri(ad="Test", soyad="Müşteri", bakiye=Decimal("0.00"), borc=Decimal("0.00"))
+    m = Musteri(ad="Test", soyad="Müşteri")
     session.add(m)
     session.commit()
     return m
 
 
-def test_bakiye_yukleme(session, admin):
+def test_musteri_olusturma(session):
     m = _musteri_ekle(session)
-    tutar = Decimal("500.00")
-    m.bakiye = Decimal(str(m.bakiye)) + tutar
-    session.add(Odeme(
-        musteri_id=m.id, islem_tipi="BAKIYE_YUKLEME", tutar=tutar,
-        odeme_araci="NAKIT", admin_id=admin.id,
-    ))
-    session.commit()
     guncel = session.query(Musteri).filter_by(id=m.id).first()
-    assert Decimal(str(guncel.bakiye)) == Decimal("500.00")
+    assert guncel.ad == "Test"
+    assert guncel.soyad == "Müşteri"
+    assert guncel.aktif is True
 
 
-def test_tahsilat_borc_azaltir(session, admin):
+def test_karma_odeme_kirilimi_toplami_genel_toplama_esit(session, admin):
     m = _musteri_ekle(session)
-    m.borc = Decimal("1000.00")
-    session.commit()
-    tahsilat = Decimal("400.00")
-    m.borc = max(Decimal("0.00"), Decimal(str(m.borc)) - tahsilat)
-    session.add(Odeme(
-        musteri_id=m.id, islem_tipi="TAHSILAT", tutar=tahsilat,
-        odeme_araci="NAKIT", admin_id=admin.id,
-    ))
-    session.commit()
-    guncel = session.query(Musteri).filter_by(id=m.id).first()
-    assert Decimal(str(guncel.borc)) == Decimal("600.00")
+    genel_toplam = Decimal("540.00")
+    fis = SatisFisi(
+        fis_no="SF-2026-000001", odeme_tipi="KARMA",
+        ara_toplam=Decimal("450.00"), kdv_toplam=Decimal("90.00"),
+        genel_toplam=genel_toplam, durum="TAMAMLANDI",
+        musteri_id=m.id, admin_id=admin.id,
+    )
+    session.add(fis)
+    session.flush()
 
-
-def test_bakiye_eksi_olmaz(session, admin):
-    """Bakiye kullanımında eksi düşmez — servis katmanı kontrol eder."""
-    m = _musteri_ekle(session)
-    m.bakiye = Decimal("100.00")
+    kirilim = [
+        ("NAKIT", Decimal("200.00")),
+        ("KART", Decimal("240.00")),
+        ("CEK", Decimal("100.00")),
+    ]
+    for arac, tutar in kirilim:
+        session.add(Odeme(
+            musteri_id=m.id, islem_tipi="SATIS_ODEME", tutar=tutar,
+            odeme_araci=arac, iliskili_fis_id=fis.id, admin_id=admin.id,
+        ))
     session.commit()
-    # Servis katmanı bu kontrolü yapar, test sadece modeli doğrular
-    assert Decimal(str(m.bakiye)) >= Decimal("0.00")
+
+    odemeler = session.query(Odeme).filter_by(iliskili_fis_id=fis.id).all()
+    toplam = sum(Decimal(str(o.tutar)) for o in odemeler)
+    assert toplam == genel_toplam

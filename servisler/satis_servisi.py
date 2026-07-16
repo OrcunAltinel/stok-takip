@@ -103,46 +103,22 @@ def fis_olustur(
             )
             session.add(hareket)
 
-        # Müşteri + ödeme kayıtları
-        if musteri_id:
-            musteri = session.query(Musteri).filter_by(id=musteri_id).first()
-
-            if odeme_tipi == "VERESIYE":
-                musteri.borc = Decimal(str(musteri.borc)) + genel_toplam
+        # KARMA ödeme — her araç için ayrı Odeme kaydı (nakit/kart/çek kırılımı)
+        if odeme_tipi == "KARMA" and karma_odemeler:
+            for ko in karma_odemeler:
+                k_tutar = Decimal(str(ko["tutar"]))
+                if k_tutar <= 0:
+                    continue
                 session.add(Odeme(
                     musteri_id=musteri_id,
-                    islem_tipi="SATIS_BORC",
-                    tutar=genel_toplam,
-                    odeme_araci="VERESIYE",
+                    islem_tipi="SATIS_ODEME",
+                    tutar=k_tutar,
+                    odeme_araci=ko["odeme_araci"],
                     iliskili_fis_id=fis.id,
                     tarih=fis.tarih,
-                    aciklama=f"Veresiye satış: {fis_no}",
+                    aciklama=f"KARMA ödeme: {fis_no}",
                     admin_id=admin_id,
                 ))
-
-            elif odeme_tipi == "BAKIYE":
-                musteri.bakiye = Decimal(str(musteri.bakiye)) - genel_toplam
-
-            elif odeme_tipi == "KARMA" and karma_odemeler:
-                for ko in karma_odemeler:
-                    k_tutar = Decimal(str(ko["tutar"]))
-                    if k_tutar <= 0:
-                        continue
-                    k_arac = ko["odeme_araci"]
-                    if k_arac == "VERESIYE":
-                        musteri.borc = Decimal(str(musteri.borc)) + k_tutar
-                        session.add(Odeme(
-                            musteri_id=musteri_id,
-                            islem_tipi="SATIS_BORC",
-                            tutar=k_tutar,
-                            odeme_araci="VERESIYE",
-                            iliskili_fis_id=fis.id,
-                            tarih=fis.tarih,
-                            aciklama=f"KARMA/Veresiye: {fis_no}",
-                            admin_id=admin_id,
-                        ))
-                    elif k_arac == "BAKIYE":
-                        musteri.bakiye = Decimal(str(musteri.bakiye)) - k_tutar
 
         session.flush()
         session.expunge(fis)
@@ -158,6 +134,15 @@ def fis_iptal(fis_id: int, admin_id: int) -> None:
         if fis.durum == "IPTAL":
             raise ValueError("Fiş zaten iptal edilmiş.")
         fis.durum = "IPTAL"
+
+
+def tum_fis_numaralari() -> list[str]:
+    """Otomatik tamamlama için tüm fiş numaralarını döner (en yeni önce)."""
+    with get_session() as session:
+        return [
+            f[0] for f in
+            session.query(SatisFisi.fis_no).order_by(SatisFisi.fis_no.desc()).all()
+        ]
 
 
 def fis_bul_no(fis_no: str) -> Optional[SatisFisi]:

@@ -19,8 +19,14 @@ from veritabani.modeller import Admin, Urun
 from yardimcilar.formatlayici import miktar_formatla, para_formatla
 
 
+_SAYISAL_ALANLAR = {
+    "stok_miktari", "kritik_stok_seviyesi", "alis_fiyati", "satis_fiyati",
+    "kdvli_fiyat", "kdv_orani",
+}
+
 _SUTUNLAR = [
     ("Kod", "urun_kodu"),
+    ("RAPA Kodu", "rapa_kodu"),
     ("Ürün Adı", "urun_adi"),
     ("OEM No", "oem_no"),
     ("Marka", "marka"),
@@ -28,6 +34,7 @@ _SUTUNLAR = [
     ("Kritik", "kritik_stok_seviyesi"),
     ("Alış", "alis_fiyati"),
     ("Satış", "satis_fiyati"),
+    ("KDV'li Fiyat", "kdvli_fiyat"),
     ("KDV%", "kdv_orani"),
     ("Birim", "birim"),
     ("Raf", "raf_adresi"),
@@ -62,8 +69,8 @@ class UrunModel(QAbstractTableModel):
         deger = getattr(urun, alan)
 
         if role == Qt.ItemDataRole.DisplayRole:
-            if alan in ("alis_fiyati", "satis_fiyati"):
-                return para_formatla(deger)
+            if alan in ("alis_fiyati", "satis_fiyati", "kdvli_fiyat"):
+                return para_formatla(deger) if deger is not None else ""
             if alan in ("stok_miktari", "kritik_stok_seviyesi"):
                 return miktar_formatla(deger)
             if alan == "kdv_orani":
@@ -80,13 +87,28 @@ class UrunModel(QAbstractTableModel):
                     return QColor("#fab387")
 
         if role == Qt.ItemDataRole.TextAlignmentRole:
-            if alan in ("stok_miktari", "kritik_stok_seviyesi", "alis_fiyati", "satis_fiyati", "kdv_orani"):
+            if alan in ("stok_miktari", "kritik_stok_seviyesi", "alis_fiyati", "satis_fiyati", "kdvli_fiyat", "kdv_orani"):
                 return Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
 
         if role == Qt.ItemDataRole.UserRole:
             return urun
 
         return None
+
+    def sort(self, column: int, order: Qt.SortOrder = Qt.SortOrder.AscendingOrder):
+        if not (0 <= column < len(_SUTUNLAR)):
+            return
+        alan = _SUTUNLAR[column][1]
+
+        def anahtar(urun: Urun):
+            deger = getattr(urun, alan)
+            if alan in _SAYISAL_ALANLAR:
+                return Decimal(str(deger)) if deger is not None else Decimal("-Infinity")
+            return str(deger).lower() if deger is not None else ""
+
+        self.layoutAboutToBeChanged.emit()
+        self._veri.sort(key=anahtar, reverse=(order == Qt.SortOrder.DescendingOrder))
+        self.layoutChanged.emit()
 
     def urun_satir(self, row: int) -> Urun:
         return self._veri[row]
@@ -115,12 +137,15 @@ class UrunEkleDialog(QDialog):
         self.oem_no = QLineEdit()
         self.marka = QLineEdit()
         self.kategori = QLineEdit()
+        self.rapa_kodu = QLineEdit()
+        self.rapa_kodu.setPlaceholderText("Örn: RAPA-02647")
 
         self.birim = QComboBox()
         self.birim.addItems(["adet", "litre", "takım", "kg", "metre"])
 
         self.alis_fiyati = ParaGirisi()
         self.satis_fiyati = ParaGirisi()
+        self.kdvli_fiyat = ParaGirisi()
 
         self.kdv_orani = QComboBox()
         for oran in ["0", "10", "20"]:
@@ -135,9 +160,11 @@ class UrunEkleDialog(QDialog):
         form.addRow("OEM No:", self.oem_no)
         form.addRow("Marka:", self.marka)
         form.addRow("Kategori:", self.kategori)
+        form.addRow("RAPA Kodu:", self.rapa_kodu)
         form.addRow("Birim:", self.birim)
         form.addRow("Alış Fiyatı:", self.alis_fiyati)
         form.addRow("Satış Fiyatı:", self.satis_fiyati)
+        form.addRow("KDV'li Fiyat:", self.kdvli_fiyat)
         form.addRow("KDV Oranı:", self.kdv_orani)
         form.addRow("Kritik Stok:", self.kritik_stok)
         form.addRow("Raf Adresi:", self.raf_adresi)
@@ -160,11 +187,14 @@ class UrunEkleDialog(QDialog):
         self.oem_no.setText(u.oem_no or "")
         self.marka.setText(u.marka or "")
         self.kategori.setText(u.kategori or "")
+        self.rapa_kodu.setText(u.rapa_kodu or "")
         idx = self.birim.findText(u.birim)
         if idx >= 0:
             self.birim.setCurrentIndex(idx)
         self.alis_fiyati.deger_ata(Decimal(str(u.alis_fiyati)))
         self.satis_fiyati.deger_ata(Decimal(str(u.satis_fiyati)))
+        if u.kdvli_fiyat is not None:
+            self.kdvli_fiyat.deger_ata(Decimal(str(u.kdvli_fiyat)))
         kdv_str = str(int(Decimal(str(u.kdv_orani))))
         k_idx = self.kdv_orani.findData(kdv_str)
         if k_idx >= 0:
@@ -193,9 +223,11 @@ class UrunEkleDialog(QDialog):
             oem_no=self.oem_no.text().strip() or None,
             marka=self.marka.text().strip() or None,
             kategori=self.kategori.text().strip() or None,
+            rapa_kodu=self.rapa_kodu.text().strip() or None,
             birim=self.birim.currentText(),
             alis_fiyati=self.alis_fiyati.deger(),
             satis_fiyati=self.satis_fiyati.deger(),
+            kdvli_fiyat=self.kdvli_fiyat.deger(),
             kdv_orani=kdv,
             kritik_stok_seviyesi=kritik,
             raf_adresi=self.raf_adresi.text().strip() or None,
@@ -294,7 +326,7 @@ class UrunlerEkrani(QWidget):
         # Arama + filtre
         arama_satir = QHBoxLayout()
         self.arama_kutusu = QLineEdit()
-        self.arama_kutusu.setPlaceholderText("Kod, ürün adı veya OEM no ile ara...")
+        self.arama_kutusu.setPlaceholderText("Kod, ürün adı, OEM no veya RAPA kodu ile ara...")
         self.arama_kutusu.textChanged.connect(self._anlık_ara)
 
         self.mod_iceride = QRadioButton("İçinde geçen")

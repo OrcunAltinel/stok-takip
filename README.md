@@ -92,9 +92,9 @@ stok/
 ## Özellikler
 
 - Koyu/Açık tema (Ayarlar'dan değiştirilebilir)
-- Satış fişi: NAKIT, KART, BAKIYE, VERESİYE, KARMA ödeme
-- Müşteri cari ekstresi (Netsis benzeri)
-- 5 rapor tipi + Excel aktarımı
+- Satış fişi: NAKİT, KART, ÇEK, KARMA ödeme
+- Müşteri satış/iade geçmişi
+- 4 rapor tipi + Excel aktarımı
 - A4 PDF fiş (os.startfile ile önizleme)
 - Otomatik yedekleme (uygulama kapanışında, son 30 yedek)
 - Soft delete (hiçbir kayıt kalıcı silinmez)

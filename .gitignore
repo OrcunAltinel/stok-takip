@@ -1,6 +1,9 @@
 # Veritabanı (gerçek veri içerir)
 veritabani/stok_takip.db
 
+# Tedarikçi fiyat teklifleri (hassas ticari veri)
+*.xlsx
+
 # Oturum (kişisel)
 oturum.json
 

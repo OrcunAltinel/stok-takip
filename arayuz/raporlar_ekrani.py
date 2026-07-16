@@ -143,9 +143,6 @@ class RaporlarEkrani(QWidget):
         self.stok_sekme = _RaporSekmesi(
             ["Tarih", "Ürün Kodu", "Ürün Adı", "Hareket", "Miktar", "Birim Fiyat", "Açıklama"]
         )
-        self.borclu_sekme = _RaporSekmesi(
-            ["ID", "Müşteri", "Firma", "Telefon", "Borç", "Bakiye"]
-        )
         self.kar_sekme = _RaporSekmesi(
             ["Ürün Kodu", "Ürün Adı", "Satılan Miktar", "Ciro", "Maliyet", "Kâr"]
         )
@@ -153,7 +150,6 @@ class RaporlarEkrani(QWidget):
         self.tabs.addTab(self.satis_sekme, "Satış Raporu")
         self.tabs.addTab(self.urun_bazli_sekme, "En Çok Satanlar")
         self.tabs.addTab(self.stok_sekme, "Stok Hareketleri")
-        self.tabs.addTab(self.borclu_sekme, "Borçlu Müşteriler")
         self.tabs.addTab(self.kar_sekme, "Kâr Raporu")
         layout.addWidget(self.tabs)
 
@@ -211,13 +207,6 @@ class RaporlarEkrani(QWidget):
                     r["aciklama"],
                 ]
                 for r in stok
-            ])
-
-            borclu = rapor_servisi.borclu_musteriler()
-            self.borclu_sekme.guncelle([
-                [str(r["id"]), r["musteri"], r["firma"], r["telefon"],
-                 para_formatla(r["borc"]), para_formatla(r["bakiye"])]
-                for r in borclu
             ])
 
             kar = rapor_servisi.kar_raporu(bas, bit)

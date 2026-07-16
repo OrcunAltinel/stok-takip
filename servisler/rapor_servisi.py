@@ -103,27 +103,6 @@ def stok_hareket_raporu(baslangic: datetime, bitis: datetime) -> list[dict]:
         return sonuc
 
 
-def borclu_musteriler() -> list[dict]:
-    with get_session() as session:
-        musteriler = (
-            session.query(Musteri)
-            .filter(Musteri.aktif == True, Musteri.borc > 0)
-            .order_by(Musteri.borc.desc())
-            .all()
-        )
-        return [
-            {
-                "id": m.id,
-                "musteri": f"{m.ad} {m.soyad}",
-                "firma": m.firma_adi or "",
-                "telefon": m.telefon or "",
-                "borc": m.borc,
-                "bakiye": m.bakiye,
-            }
-            for m in musteriler
-        ]
-
-
 def en_cok_satanlar(baslangic: datetime, bitis: datetime, limit: int = 20) -> list[dict]:
     return urun_bazli_satis(baslangic, bitis)[:limit]
 
@@ -180,12 +159,7 @@ def dashboard_ozet() -> dict:
             ).scalar()
             return Decimal(str(sonuc)) if sonuc else Decimal("0.00")
 
-        toplam_veresiye = session.query(func.sum(Musteri.borc)).filter(Musteri.aktif == True).scalar()
-        toplam_bakiye = session.query(func.sum(Musteri.bakiye)).filter(Musteri.aktif == True).scalar()
-
         return {
             "bugun_satis": satis_toplam(bugun_bas, bugun_bit),
             "bu_ay_satis": satis_toplam(bu_ay_bas, bugun_bit),
-            "toplam_veresiye": Decimal(str(toplam_veresiye)) if toplam_veresiye else Decimal("0.00"),
-            "toplam_bakiye": Decimal(str(toplam_bakiye)) if toplam_bakiye else Decimal("0.00"),
         }

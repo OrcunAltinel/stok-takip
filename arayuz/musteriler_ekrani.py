@@ -10,7 +10,6 @@ from PySide6.QtWidgets import (
 from arayuz.cari_ekstre_ekrani import CariEkstreEkrani
 from servisler import musteri_servisi
 from veritabani.modeller import Admin, Musteri
-from yardimcilar.formatlayici import para_formatla
 
 _SUTUNLAR = [
     ("ID", "id"),
@@ -19,8 +18,6 @@ _SUTUNLAR = [
     ("Firma", "firma_adi"),
     ("Telefon", "telefon"),
     ("Bölge", "bolge"),
-    ("Bakiye", "bakiye"),
-    ("Borç", "borc"),
 ]
 
 
@@ -51,14 +48,9 @@ class MusteriModel(QAbstractTableModel):
         alan = _SUTUNLAR[idx.column()][1]
         v = getattr(m, alan)
         if role == Qt.ItemDataRole.DisplayRole:
-            if alan in ("bakiye", "borc"):
-                return para_formatla(v)
             return str(v) if v else ""
         if role == Qt.ItemDataRole.UserRole:
             return m
-        if role == Qt.ItemDataRole.TextAlignmentRole:
-            if alan in ("bakiye", "borc"):
-                return Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
         return None
 
     def musteri_satir(self, row: int) -> Musteri:
@@ -90,7 +82,7 @@ class MusterilerEkrani(QWidget):
         self.yeni_btn.clicked.connect(self._yeni)
         self.duzenle_btn = QPushButton("Düzenle")
         self.duzenle_btn.clicked.connect(self._duzenle)
-        self.ekstre_btn = QPushButton("Cari Ekstre")
+        self.ekstre_btn = QPushButton("Satış Geçmişi")
         self.ekstre_btn.clicked.connect(self._cari_ekstre)
         self.bilgi = QLabel("")
         self.bilgi.setObjectName("alt_baslik")

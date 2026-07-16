@@ -6,8 +6,7 @@ from typing import Optional
 
 from veritabani.baglanti import get_session
 from veritabani.modeller import (
-    IadeFisi, IadeKalemi, Musteri, Odeme, SatisFisi, SatisKalemi,
-    StokHareketi, Urun,
+    IadeFisi, IadeKalemi, SatisFisi, StokHareketi, Urun,
 )
 
 
@@ -31,7 +30,7 @@ def iade_olustur(
 ) -> IadeFisi:
     """
     iade_kalemleri_liste: [{"urun_id": int, "miktar": Decimal, "birim_fiyat": Decimal}]
-    iade_yontemi: NAKIT_ODE | BAKIYEYE_EKLE | BORCTAN_DUS
+    iade_yontemi: NAKIT_ODE | KART_ODE | CEK_ODE
     """
     if not iade_kalemleri_liste:
         raise ValueError("En az bir iade kalemi gereklidir.")
@@ -95,28 +94,6 @@ def iade_olustur(
                 admin_id=admin_id,
             )
             session.add(hareket)
-
-        if orijinal.musteri_id:
-            musteri = session.query(Musteri).filter_by(id=orijinal.musteri_id).first()
-            if iade_yontemi == "BAKIYEYE_EKLE":
-                musteri.bakiye = Decimal(str(musteri.bakiye)) + toplam_tutar
-                islem_tipi = "IADE_ALACAK"
-            elif iade_yontemi == "BORCTAN_DUS":
-                musteri.borc = max(Decimal("0.00"), Decimal(str(musteri.borc)) - toplam_tutar)
-                islem_tipi = "IADE_ALACAK"
-            else:
-                islem_tipi = "IADE_ALACAK"
-
-            session.add(Odeme(
-                musteri_id=orijinal.musteri_id,
-                islem_tipi=islem_tipi,
-                tutar=toplam_tutar,
-                odeme_araci=iade_yontemi,
-                iliskili_fis_id=orijinal_fis_id,
-                tarih=fis.tarih,
-                aciklama=f"İade: {iade_no} — {iade_yontemi}",
-                admin_id=admin_id,
-            ))
 
         session.flush()
         session.expunge(fis)

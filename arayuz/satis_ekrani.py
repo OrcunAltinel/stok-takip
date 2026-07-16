@@ -57,6 +57,9 @@ class SepetModel(QAbstractTableModel):
                 return f"%{s['kdv_orani']}"
             if col == 5:
                 return para_formatla(s["satir_toplam"])
+        if role == Qt.ItemDataRole.EditRole:
+            if col == 2:
+                return miktar_formatla(s["miktar"])
         if role == Qt.ItemDataRole.ForegroundRole:
             if s.get("stok_uyari"):
                 return QColor("#fab387")
@@ -64,6 +67,39 @@ class SepetModel(QAbstractTableModel):
             if col in (2, 3, 4, 5):
                 return Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
         return None
+
+    def flags(self, idx):
+        temel = super().flags(idx)
+        if idx.isValid() and idx.column() == 2:
+            return temel | Qt.ItemFlag.ItemIsEditable
+        return temel
+
+    def setData(self, idx, value, role=Qt.ItemDataRole.EditRole):
+        if role != Qt.ItemDataRole.EditRole or not idx.isValid() or idx.column() != 2:
+            return False
+        try:
+            miktar = Decimal(str(value).replace(",", "."))
+            if miktar <= 0:
+                raise ValueError
+        except Exception:
+            return False
+
+        s = self._satirlar[idx.row()]
+        s["miktar"] = miktar
+        fiyat = Decimal(str(s["birim_fiyat"]))
+        kdv = Decimal(str(s["kdv_orani"]))
+        satis_tutari = (miktar * fiyat).quantize(Decimal("0.01"))
+        kdv_tutari = (satis_tutari * kdv / Decimal("100")).quantize(Decimal("0.01"))
+        s["satir_toplam"] = satis_tutari + kdv_tutari
+
+        from servisler import urun_servisi
+        urun = urun_servisi.urun_bul_id(s["urun_id"])
+        s["stok_uyari"] = urun is not None and Decimal(str(urun.stok_miktari)) < miktar
+
+        self.dataChanged.emit(
+            self.index(idx.row(), 0), self.index(idx.row(), self.columnCount() - 1)
+        )
+        return True
 
     def ekle(self, satir: dict):
         self.beginInsertRows(QModelIndex(), len(self._satirlar), len(self._satirlar))
@@ -128,7 +164,7 @@ class SatisEkrani(QWidget):
         urun_grup = QGroupBox("Ürün Ekle")
         u_layout = QHBoxLayout(urun_grup)
         self.urun_arama = QLineEdit()
-        self.urun_arama.setPlaceholderText("Ürün kodu veya adı...")
+        self.urun_arama.setPlaceholderText("Ürün kodu, adı veya RAPA kodu...")
         self.urun_arama.textChanged.connect(self._urun_ara)
         self.urun_combo = QComboBox()
         self.urun_combo.setMinimumWidth(200)
@@ -154,10 +190,13 @@ class SatisEkrani(QWidget):
         self.sepet_tablo = QTableView()
         self.sepet_tablo.setModel(self.sepet_model)
         self.sepet_tablo.setAlternatingRowColors(True)
-        self.sepet_tablo.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.sepet_tablo.setEditTriggers(
+            QAbstractItemView.EditTrigger.DoubleClicked | QAbstractItemView.EditTrigger.EditKeyPressed
+        )
         self.sepet_tablo.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.sepet_tablo.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
         self.sepet_tablo.horizontalHeader().setStretchLastSection(True)
+        self.sepet_model.dataChanged.connect(lambda *_: self._toplamları_guncelle())
         layout.addWidget(self.sepet_tablo, 1)
 
         # Sepet işlemleri + toplamlar
@@ -183,7 +222,7 @@ class SatisEkrani(QWidget):
         odeme_grup = QGroupBox("Ödeme")
         odeme_layout = QHBoxLayout(odeme_grup)
         self.odeme_tipi = QComboBox()
-        self.odeme_tipi.addItems(["NAKIT", "KART", "BAKIYE", "VERESIYE", "KARMA"])
+        self.odeme_tipi.addItems(["NAKIT", "KART", "CEK", "KARMA"])
         self.odeme_tipi.currentTextChanged.connect(self._odeme_tipi_degisti)
         self.aciklama_edit = QLineEdit()
         self.aciklama_edit.setPlaceholderText("Açıklama (opsiyonel)")
@@ -203,19 +242,22 @@ class SatisEkrani(QWidget):
     def _musteri_ara(self, metin: str):
         self.musteri_combo.blockSignals(True)
         self.musteri_combo.clear()
+        eslesenler = musteri_servisi.musteri_ara(metin) if metin else []
+        for m in eslesenler:
+            self.musteri_combo.addItem(f"#{m.id} {m.ad} {m.soyad}", m.id)
         self.musteri_combo.addItem("— Perakende (müşterisiz) —", None)
-        if metin:
-            for m in musteri_servisi.musteri_ara(metin):
-                self.musteri_combo.addItem(f"#{m.id} {m.ad} {m.soyad}", m.id)
         self.musteri_combo.blockSignals(False)
+        self.musteri_combo.setCurrentIndex(0)
+        self._musteri_secildi(0)
 
     def _musteri_secildi(self, idx: int):
         musteri_id = self.musteri_combo.currentData()
         if musteri_id:
             self._musteri = musteri_servisi.musteri_bul_id(musteri_id)
-            self.musteri_bilgi.setText(
-                f"Bakiye: {para_formatla(self._musteri.bakiye)} | Borç: {para_formatla(self._musteri.borc)}"
-            )
+            bilgi = f"{self._musteri.ad} {self._musteri.soyad}"
+            if self._musteri.firma_adi:
+                bilgi += f" — {self._musteri.firma_adi}"
+            self.musteri_bilgi.setText(bilgi)
         else:
             self._musteri = None
             self.musteri_bilgi.setText("Müşteri seçilmedi (perakende)")
@@ -303,10 +345,6 @@ class SatisEkrani(QWidget):
 
         odeme_tipi = self.odeme_tipi.currentText()
         musteri_id = self._musteri.id if self._musteri else None
-
-        if odeme_tipi in ("VERESIYE", "BAKIYE") and not musteri_id:
-            QMessageBox.warning(self, "Uyarı", f"{odeme_tipi} için müşteri seçilmelidir.")
-            return
 
         karma_odemeler = None
         if odeme_tipi == "KARMA":
@@ -406,12 +444,10 @@ class KarmaOdemeDialog(QDialog):
         form = QFormLayout()
         self.nakit_edit = ParaGirisi()
         self.kart_edit = ParaGirisi()
-        self.bakiye_edit = ParaGirisi()
-        self.veresiye_edit = ParaGirisi()
+        self.cek_edit = ParaGirisi()
         form.addRow("Nakit:", self.nakit_edit)
         form.addRow("Kart:", self.kart_edit)
-        form.addRow("Bakiye:", self.bakiye_edit)
-        form.addRow("Veresiye:", self.veresiye_edit)
+        form.addRow("Çek:", self.cek_edit)
         layout.addLayout(form)
 
         self.hata = QLabel("")
@@ -431,8 +467,7 @@ class KarmaOdemeDialog(QDialog):
 
     def _onayla(self):
         toplam_girilen = (
-            self.nakit_edit.deger() + self.kart_edit.deger() +
-            self.bakiye_edit.deger() + self.veresiye_edit.deger()
+            self.nakit_edit.deger() + self.kart_edit.deger() + self.cek_edit.deger()
         )
         if toplam_girilen != self.toplam:
             self.hata.setText(
@@ -447,8 +482,7 @@ class KarmaOdemeDialog(QDialog):
         for arac, deger in [
             ("NAKIT", self.nakit_edit.deger()),
             ("KART", self.kart_edit.deger()),
-            ("BAKIYE", self.bakiye_edit.deger()),
-            ("VERESIYE", self.veresiye_edit.deger()),
+            ("CEK", self.cek_edit.deger()),
         ]:
             if deger > 0:
                 sonuc.append({"odeme_araci": arac, "tutar": deger})

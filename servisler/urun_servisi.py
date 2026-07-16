@@ -36,6 +36,7 @@ def urun_ara(arama: str, mod: str = "iceride") -> list[Urun]:
                     Urun.urun_kodu.ilike(filtre),
                     Urun.urun_adi.ilike(filtre),
                     Urun.oem_no.ilike(filtre),
+                    Urun.rapa_kodu.ilike(filtre),
                 )
             )
         sonuclar = q.order_by(Urun.urun_kodu).limit(200).all()
@@ -66,9 +67,11 @@ def urun_ekle(
     oem_no: str = None,
     marka: str = None,
     kategori: str = None,
+    rapa_kodu: str = None,
     birim: str = "adet",
     alis_fiyati: Decimal = Decimal("0.00"),
     satis_fiyati: Decimal = Decimal("0.00"),
+    kdvli_fiyat: Decimal = None,
     kdv_orani: Decimal = Decimal("20.00"),
     kritik_stok_seviyesi: Decimal = Decimal("5.000"),
     raf_adresi: str = None,
@@ -80,9 +83,11 @@ def urun_ekle(
             oem_no=oem_no,
             marka=marka,
             kategori=kategori,
+            rapa_kodu=rapa_kodu,
             birim=birim,
             alis_fiyati=alis_fiyati,
             satis_fiyati=satis_fiyati,
+            kdvli_fiyat=kdvli_fiyat,
             kdv_orani=kdv_orani,
             kritik_stok_seviyesi=kritik_stok_seviyesi,
             raf_adresi=raf_adresi,

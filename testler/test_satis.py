@@ -5,7 +5,7 @@ from datetime import datetime
 import pytest
 
 from veritabani.modeller import (
-    Musteri, SatisFisi, SatisKalemi, StokHareketi, Urun,
+    Musteri, Odeme, SatisFisi, SatisKalemi, StokHareketi, Urun,
 )
 
 
@@ -22,7 +22,7 @@ def _urun(session, kod="TST-01", stok=Decimal("20")) -> Urun:
 
 
 def _musteri(session) -> Musteri:
-    m = Musteri(ad="Ali", soyad="Test", bakiye=Decimal("1000.00"), borc=Decimal("0.00"))
+    m = Musteri(ad="Ali", soyad="Test")
     session.add(m)
     session.commit()
     return m
@@ -68,20 +68,29 @@ def test_nakit_satis_stok_dusuyor(session, admin):
     assert session.query(SatisKalemi).filter_by(satis_fisi_id=fis.id).count() == 1
 
 
-def test_veresiye_satis_borc_artar(session, admin):
+def test_karma_satis_odeme_kayitlari(session, admin):
     m = _musteri(session)
     tutar = Decimal("540.00")
     fis = SatisFisi(
         fis_no="SF-2026-000002", tarih=datetime.now(),
         ara_toplam=Decimal("450.00"), kdv_toplam=Decimal("90.00"),
-        genel_toplam=tutar, odeme_tipi="VERESIYE",
+        genel_toplam=tutar, odeme_tipi="KARMA",
         durum="TAMAMLANDI", musteri_id=m.id, admin_id=admin.id,
     )
     session.add(fis)
-    m.borc = Decimal(str(m.borc)) + tutar
+    session.flush()
+    session.add(Odeme(
+        musteri_id=m.id, islem_tipi="SATIS_ODEME", tutar=Decimal("300.00"),
+        odeme_araci="NAKIT", iliskili_fis_id=fis.id, admin_id=admin.id,
+    ))
+    session.add(Odeme(
+        musteri_id=m.id, islem_tipi="SATIS_ODEME", tutar=Decimal("240.00"),
+        odeme_araci="KART", iliskili_fis_id=fis.id, admin_id=admin.id,
+    ))
     session.commit()
-    guncel = session.query(Musteri).filter_by(id=m.id).first()
-    assert Decimal(str(guncel.borc)) == tutar
+
+    odemeler = session.query(Odeme).filter_by(iliskili_fis_id=fis.id).all()
+    assert sum(Decimal(str(o.tutar)) for o in odemeler) == tutar
 
 
 def test_fis_no_format():

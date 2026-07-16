@@ -61,7 +61,8 @@ Tüm değişken, fonksiyon, sınıf ve tablo adları Türkçe, ASCII uyumlu yaz�
 
 ## Önemli Kısıtlamalar
 
-- **KARMA ödeme**: Tutarlar toplamı `genel_toplam`'a tam eşit olmalı; her araç için ayrı `Odeme` kaydı düşülür.
-- **Satış → Cari**: VERESIYE satışta `musteri.borc` artar + `SATIS_BORC` ödeme kaydı; BAKIYE satışta `musteri.bakiye` düşer (ödeme kaydı açılmaz).
-- **İade → Stok**: `iade_servisi.iade_olustur()` her kalem için otomatik `IADE_GIRIS` stok hareketi oluşturur ve `stok_miktari`'nı artırır.
+- **Ödeme yöntemleri**: Satış anında sadece NAKIT, KART, CEK veya bunların KARMA kombinasyonu ile ödeme alınır. Borç/veresiye ve müşteri bakiyesi (ön ödeme/cari hesap) kavramları yoktur — `Musteri` modelinde `borc`/`bakiye` alanı bulunmaz.
+- **KARMA ödeme**: Tutarlar toplamı `genel_toplam`'a tam eşit olmalı; her araç (NAKIT/KART/CEK) için ayrı `Odeme` kaydı (`islem_tipi="SATIS_ODEME"`) düşülür. KARMA satış için müşteri seçilmesi zorunludur (`Odeme.musteri_id` NOT NULL).
+- **İade → Stok**: `iade_servisi.iade_olustur()` her kalem için otomatik `IADE_GIRIS` stok hareketi oluşturur ve `stok_miktari`'nı artırır. İade yöntemi (`NAKIT_ODE`/`KART_ODE`/`CEK_ODE`) sadece bilgi amaçlıdır, müşteri bakiyesini etkilemez.
+- **Müşteri geçmişi**: `musteri_servisi.cari_hareketler()` müşterinin satış (`SatisFisi`) ve iade (`IadeFisi`) kayıtlarını doğrudan sorgulayıp kronolojik döner; ayrı bir borç/bakiye defteri tutulmaz.
 - **Yedekleme**: `yedek_servisi.otomatik_yedek_al()` `AnaPencere.closeEvent()` içinde çağrılır; son 30 yedek `yedekler/` klasöründe tutulur.

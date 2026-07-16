@@ -16,7 +16,7 @@ def _hazirla(session, admin):
         kdv_orani=Decimal("20.00"), stok_miktari=Decimal("7.000"),
         kritik_stok_seviyesi=Decimal("5.000"),
     )
-    m = Musteri(ad="İade", soyad="Müşteri", bakiye=Decimal("0.00"), borc=Decimal("200.00"))
+    m = Musteri(ad="İade", soyad="Müşteri")
     session.add_all([urun, m])
     session.flush()
     fis = SatisFisi(
@@ -37,7 +37,7 @@ def test_iade_stok_artar(session, admin):
     iade_fis = IadeFisi(
         iade_no="IF-2026-000001", orijinal_fis_id=fis.id, musteri_id=m.id,
         tarih=datetime.now(), toplam_tutar=Decimal("300.00"),
-        iade_yontemi="BORCTAN_DUS", admin_id=admin.id,
+        iade_yontemi="NAKIT_ODE", admin_id=admin.id,
     )
     session.add(iade_fis)
     session.flush()
@@ -57,10 +57,15 @@ def test_iade_stok_artar(session, admin):
     assert Decimal(str(guncel.stok_miktari)) == Decimal("9.000")
 
 
-def test_iade_borctan_dusme(session, admin):
+@pytest.mark.parametrize("iade_yontemi", ["NAKIT_ODE", "KART_ODE", "CEK_ODE"])
+def test_iade_yontemi_kaydediliyor(session, admin, iade_yontemi):
     urun, m, fis = _hazirla(session, admin)
-    iade_tutari = Decimal("150.00")
-    m.borc = max(Decimal("0.00"), Decimal(str(m.borc)) - iade_tutari)
+    iade_fis = IadeFisi(
+        iade_no=f"IF-2026-{iade_yontemi}", orijinal_fis_id=fis.id, musteri_id=m.id,
+        tarih=datetime.now(), toplam_tutar=Decimal("150.00"),
+        iade_yontemi=iade_yontemi, admin_id=admin.id,
+    )
+    session.add(iade_fis)
     session.commit()
-    guncel = session.query(Musteri).filter_by(id=m.id).first()
-    assert Decimal(str(guncel.borc)) == Decimal("50.00")
+    guncel = session.query(IadeFisi).filter_by(iade_no=iade_fis.iade_no).first()
+    assert guncel.iade_yontemi == iade_yontemi

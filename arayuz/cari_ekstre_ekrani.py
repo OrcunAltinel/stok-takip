@@ -1,23 +1,19 @@
-"""Cari ekstre ekranı — müşterinin tüm hareketleri."""
-
-from decimal import Decimal
+"""Müşteri geçmişi ekranı — satış ve iade hareketleri."""
 
 from PySide6.QtCore import QAbstractTableModel, QModelIndex, Qt
 from PySide6.QtGui import QColor, QFont
 from PySide6.QtWidgets import (
-    QAbstractItemView, QComboBox, QDialog, QDialogButtonBox, QFormLayout,
-    QGroupBox, QHBoxLayout, QHeaderView, QLabel, QLineEdit, QMessageBox,
-    QPushButton, QTableView, QTableWidget, QTableWidgetItem,
-    QVBoxLayout, QWidget,
+    QAbstractItemView, QDialog, QGroupBox, QHBoxLayout, QHeaderView,
+    QLabel, QPushButton, QTableView, QTableWidget,
+    QTableWidgetItem, QVBoxLayout,
 )
 
-from arayuz.bilesenler.para_girisi import ParaGirisi
 from arayuz.bilesenler.tarih_filtresi import TarihFiltresi
 from servisler import musteri_servisi, satis_servisi
 from veritabani.modeller import Admin, Musteri
 from yardimcilar.formatlayici import miktar_formatla, para_formatla, tarih_formatla
 
-_SUTUNLAR = ["Tarih", "İşlem", "Fiş / Açıklama", "Borç (₺)", "Tahsilat / Alacak (₺)"]
+_SUTUNLAR = ["Tarih", "İşlem", "Fiş / Açıklama", "Tutar (₺)"]
 
 
 class CariModel(QAbstractTableModel):
@@ -58,18 +54,14 @@ class CariModel(QAbstractTableModel):
             if col == 2:
                 return r.get("belge", "")
             if col == 3:
-                return para_formatla(r["borc"]) if r["borc"] else "—"
-            if col == 4:
-                return para_formatla(r["tahsilat"]) if r["tahsilat"] else "—"
+                return para_formatla(abs(r["tutar"]))
 
         if role == Qt.ItemDataRole.ForegroundRole:
-            if col == 3 and r["borc"]:
-                return QColor("#f38ba8")
-            if col == 4 and r["tahsilat"]:
-                return QColor("#a6e3a1")
+            if col == 3:
+                return QColor("#a6e3a1") if r["tutar"] < 0 else QColor("#f38ba8")
 
         if role == Qt.ItemDataRole.TextAlignmentRole:
-            if col in (3, 4):
+            if col == 3:
                 return Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
             return Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft
 
@@ -85,7 +77,7 @@ class CariEkstreEkrani(QDialog):
         super().__init__(parent)
         self.musteri = musteri
         self.admin = admin
-        self.setWindowTitle(f"Hesap Hareketleri — {musteri.ad} {musteri.soyad}")
+        self.setWindowTitle(f"Satış / İade Geçmişi — {musteri.ad} {musteri.soyad}")
         self.setMinimumSize(920, 600)
         self._kur()
         self.yenile()
@@ -124,38 +116,25 @@ class CariEkstreEkrani(QDialog):
         layout.addWidget(self.tablo, 1)
 
         # Özet kutusu
-        ozet = QGroupBox("Hesap Özeti")
+        ozet = QGroupBox("Dönem Özeti")
         ozet_layout = QHBoxLayout(ozet)
         ozet_layout.setSpacing(24)
 
-        self.lbl_donem_borc = QLabel()
-        self.lbl_donem_tahsilat = QLabel()
-        self.lbl_guncel_borc = QLabel()
-        self.lbl_guncel_bakiye = QLabel()
+        self.lbl_donem_satis = QLabel()
+        self.lbl_donem_iade = QLabel()
+        self.lbl_net = QLabel()
 
-        for lbl in [self.lbl_donem_borc, self.lbl_donem_tahsilat,
-                    self.lbl_guncel_borc, self.lbl_guncel_bakiye]:
+        for lbl in [self.lbl_donem_satis, self.lbl_donem_iade, self.lbl_net]:
             ozet_layout.addWidget(lbl)
         ozet_layout.addStretch()
         layout.addWidget(ozet)
 
         # Butonlar
         btn_satir = QHBoxLayout()
-        tahsilat_btn = QPushButton("Tahsilat Al")
-        tahsilat_btn.setObjectName("btn_basari")
-        tahsilat_btn.clicked.connect(self._tahsilat_al)
-        tahsilat_btn.setToolTip("Veresiye borcunu tahsil et")
-
-        odeme_btn = QPushButton("Ödeme / Bakiye Yükle")
-        odeme_btn.clicked.connect(self._bakiye_yukle)
-        odeme_btn.setToolTip("Ödeme al — borç varsa önce kapatılır, kalan bakiye olarak eklenir")
-
         kapat_btn = QPushButton("Kapat")
         kapat_btn.setObjectName("btn_iptal")
         kapat_btn.clicked.connect(self.accept)
 
-        btn_satir.addWidget(tahsilat_btn)
-        btn_satir.addWidget(odeme_btn)
         btn_satir.addStretch()
         btn_satir.addWidget(kapat_btn)
         layout.addLayout(btn_satir)
@@ -168,22 +147,17 @@ class CariEkstreEkrani(QDialog):
         hareketler = musteri_servisi.cari_hareketler(self.musteri.id, baslangic, bitis)
         self.model.yenile(hareketler)
 
-        donem_borc = sum(h["borc"] for h in hareketler)
-        donem_tahsilat = sum(h["tahsilat"] for h in hareketler)
+        donem_satis = sum(h["tutar"] for h in hareketler if h["tutar"] > 0)
+        donem_iade = sum(-h["tutar"] for h in hareketler if h["tutar"] < 0)
 
-        self.lbl_donem_borc.setText(
-            f"<span style='color:#f38ba8'><b>Dönem Borç:</b> {para_formatla(donem_borc)}</span>"
+        self.lbl_donem_satis.setText(
+            f"<span style='color:#f38ba8'><b>Dönem Satış:</b> {para_formatla(donem_satis)}</span>"
         )
-        self.lbl_donem_tahsilat.setText(
-            f"<span style='color:#a6e3a1'><b>Dönem Tahsilat:</b> {para_formatla(donem_tahsilat)}</span>"
+        self.lbl_donem_iade.setText(
+            f"<span style='color:#a6e3a1'><b>Dönem İade:</b> {para_formatla(donem_iade)}</span>"
         )
-        borc_renk = "#f38ba8" if self.musteri.borc > 0 else "#a6e3a1"
-        self.lbl_guncel_borc.setText(
-            f"<span style='color:{borc_renk}'><b>Güncel Borç:</b> {para_formatla(self.musteri.borc)}</span>"
-        )
-        bakiye_renk = "#a6e3a1" if self.musteri.bakiye > 0 else "#cdd6f4"
-        self.lbl_guncel_bakiye.setText(
-            f"<span style='color:{bakiye_renk}'><b>Bakiye:</b> {para_formatla(self.musteri.bakiye)}</span>"
+        self.lbl_net.setText(
+            f"<b>Net:</b> {para_formatla(donem_satis - donem_iade)}"
         )
 
     def _filtrele(self, bas, bit):
@@ -198,126 +172,6 @@ class CariEkstreEkrani(QDialog):
         if not detay:
             return
         _FisDetayDialog(detay, self).exec()
-
-    def _tahsilat_al(self):
-        dlg = _TahsilatDialog(self.musteri, self.admin, self)
-        if dlg.exec() == QDialog.DialogCode.Accepted:
-            self.yenile()
-
-    def _bakiye_yukle(self):
-        dlg = _BakiyeYukleDialog(self.musteri, self.admin, self)
-        if dlg.exec() == QDialog.DialogCode.Accepted:
-            self.yenile()
-
-
-class _TahsilatDialog(QDialog):
-    def __init__(self, musteri: Musteri, admin: Admin, parent=None):
-        super().__init__(parent)
-        self.musteri = musteri
-        self.admin = admin
-        self.setWindowTitle("Tahsilat Al")
-        self.setFixedSize(400, 260)
-        self._kur()
-
-    def _kur(self):
-        layout = QVBoxLayout(self)
-        form = QFormLayout()
-        form.setSpacing(10)
-        self.tutar_edit = ParaGirisi()
-        self.arac_combo = QComboBox()
-        self.arac_combo.addItems(["NAKİT", "KART"])
-        self.aciklama_edit = QLineEdit()
-
-        borc_lbl = QLabel(f"<b style='color:#f38ba8'>{para_formatla(self.musteri.borc)}</b>")
-        form.addRow("Mevcut Borç:", borc_lbl)
-        form.addRow("Tahsilat Tutarı:", self.tutar_edit)
-        form.addRow("Ödeme Aracı:", self.arac_combo)
-        form.addRow("Açıklama:", self.aciklama_edit)
-        layout.addLayout(form)
-
-        self.hata = QLabel("")
-        self.hata.setObjectName("uyari_etiket")
-        layout.addWidget(self.hata)
-
-        butonlar = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel
-        )
-        butonlar.accepted.connect(self._kaydet)
-        butonlar.rejected.connect(self.reject)
-        layout.addWidget(butonlar)
-
-    def _kaydet(self):
-        tutar = self.tutar_edit.deger()
-        if tutar <= 0:
-            self.hata.setText("Tutar sıfırdan büyük olmalıdır.")
-            return
-        try:
-            musteri_servisi.tahsilat_al(
-                self.musteri.id, tutar, self.arac_combo.currentText(),
-                self.admin.id, self.aciklama_edit.text()
-            )
-            self.accept()
-        except Exception as e:
-            self.hata.setText(str(e))
-
-
-class _BakiyeYukleDialog(QDialog):
-    def __init__(self, musteri: Musteri, admin: Admin, parent=None):
-        super().__init__(parent)
-        self.musteri = musteri
-        self.admin = admin
-        self.setWindowTitle("Ödeme / Bakiye Yükle")
-        self.setFixedSize(420, 300)
-        self._kur()
-
-    def _kur(self):
-        layout = QVBoxLayout(self)
-        form = QFormLayout()
-        form.setSpacing(10)
-        self.tutar_edit = ParaGirisi()
-        self.arac_combo = QComboBox()
-        self.arac_combo.addItems(["NAKİT", "KART"])
-        self.aciklama_edit = QLineEdit()
-
-        if self.musteri.borc > 0:
-            borc_lbl = QLabel(f"<b style='color:#f38ba8'>{para_formatla(self.musteri.borc)}</b>")
-            form.addRow("Mevcut Borç:", borc_lbl)
-            bilgi = QLabel("⚠ Borç varsa önce kapatılır, kalan bakiye olarak eklenir.")
-            bilgi.setObjectName("uyari_etiket")
-            layout.addWidget(bilgi)
-        else:
-            bakiye_lbl = QLabel(f"<b style='color:#a6e3a1'>{para_formatla(self.musteri.bakiye)}</b>")
-            form.addRow("Mevcut Bakiye:", bakiye_lbl)
-
-        form.addRow("Yüklenecek Tutar:", self.tutar_edit)
-        form.addRow("Ödeme Aracı:", self.arac_combo)
-        form.addRow("Açıklama:", self.aciklama_edit)
-        layout.addLayout(form)
-
-        self.hata = QLabel("")
-        self.hata.setObjectName("uyari_etiket")
-        layout.addWidget(self.hata)
-
-        butonlar = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel
-        )
-        butonlar.accepted.connect(self._kaydet)
-        butonlar.rejected.connect(self.reject)
-        layout.addWidget(butonlar)
-
-    def _kaydet(self):
-        tutar = self.tutar_edit.deger()
-        if tutar <= 0:
-            self.hata.setText("Tutar sıfırdan büyük olmalıdır.")
-            return
-        try:
-            musteri_servisi.bakiye_yukle(
-                self.musteri.id, tutar, self.arac_combo.currentText(),
-                self.admin.id, self.aciklama_edit.text()
-            )
-            self.accept()
-        except Exception as e:
-            self.hata.setText(str(e))
 
 
 class _FisDetayDialog(QDialog):

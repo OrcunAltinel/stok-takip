@@ -52,6 +52,8 @@ def get_session() -> Session:
 def veritabani_olustur():
     """Tabloları oluşturur ve ilk veriyi yükler."""
     Base.metadata.create_all(engine)
+    from veritabani.migrasyonlar import tum_migrasyonlari_calistir
+    tum_migrasyonlari_calistir(engine)
     with get_session() as session:
         _admin_seed(session)
         _firma_ayarlari_seed(session)
@@ -176,19 +178,15 @@ def demo_veri_yukle(session: Session):
             soyad="Yılmaz",
             firma_adi="Yılmaz Oto Servis",
             telefon="0532 100 20 30",
-            il="İstanbul",
+            bolge="İstanbul",
             ilce="Bağcılar",
-            bakiye=Decimal("0.00"),
-            borc=Decimal("0.00"),
         ),
         Musteri(
             ad="Fatma",
             soyad="Kaya",
             telefon="0544 200 30 40",
-            il="İstanbul",
+            bolge="İstanbul",
             ilce="Küçükçekmece",
-            bakiye=Decimal("500.00"),
-            borc=Decimal("0.00"),
         ),
     ]
     for m in musteriler:

@@ -50,7 +50,7 @@ class StokGirisEkrani(QWidget):
         ekle_layout = QHBoxLayout(ekle_grup)
 
         self.urun_arama = QLineEdit()
-        self.urun_arama.setPlaceholderText("Ürün kodu veya adı...")
+        self.urun_arama.setPlaceholderText("Ürün kodu, adı veya RAPA kodu...")
         self.urun_arama.textChanged.connect(self._urun_ara)
         self.urun_sonuc = QComboBox()
         self.urun_sonuc.setMinimumWidth(200)

@@ -4,7 +4,7 @@ from datetime import datetime
 from decimal import Decimal
 
 from sqlalchemy import (
-    Boolean, Column, DateTime, ForeignKey, Integer, Numeric,
+    Boolean, Column, DateTime, ForeignKey, Index, Integer, Numeric,
     String, Text, UniqueConstraint,
 )
 from sqlalchemy.orm import DeclarativeBase, relationship
@@ -39,8 +39,6 @@ class Musteri(Base):
     bolge = Column(String(50), nullable=True)
     ilce = Column(String(50), nullable=True)
     vergi_no = Column(String(20), nullable=True)
-    bakiye = Column(Numeric(precision=12, scale=2), default=Decimal("0.00"), nullable=False)
-    borc = Column(Numeric(precision=12, scale=2), default=Decimal("0.00"), nullable=False)
     notlar = Column(Text, nullable=True)
     kayit_tarihi = Column(DateTime, default=datetime.now)
     aktif = Column(Boolean, default=True, nullable=False)
@@ -76,9 +74,11 @@ class Urun(Base):
     oem_no = Column(String(100), nullable=True)
     marka = Column(String(100), nullable=True)
     kategori = Column(String(100), nullable=True)
+    rapa_kodu = Column(String(50), nullable=True)
     birim = Column(String(20), default="adet", nullable=False)
     alis_fiyati = Column(Numeric(precision=12, scale=2), default=Decimal("0.00"), nullable=False)
     satis_fiyati = Column(Numeric(precision=12, scale=2), default=Decimal("0.00"), nullable=False)
+    kdvli_fiyat = Column(Numeric(precision=12, scale=2), nullable=True)
     kdv_orani = Column(Numeric(precision=5, scale=2), default=Decimal("20.00"), nullable=False)
     stok_miktari = Column(Numeric(precision=12, scale=3), default=Decimal("0.000"), nullable=False)
     kritik_stok_seviyesi = Column(Numeric(precision=12, scale=3), default=Decimal("5.000"), nullable=False)
@@ -90,6 +90,10 @@ class Urun(Base):
     stok_hareketleri = relationship("StokHareketi", back_populates="urun")
     satis_kalemleri = relationship("SatisKalemi", back_populates="urun")
     iade_kalemleri = relationship("IadeKalemi", back_populates="urun")
+
+    __table_args__ = (
+        Index("ix_urunler_rapa_kodu", "rapa_kodu"),
+    )
 
 
 class StokHareketi(Base):
@@ -121,7 +125,7 @@ class SatisFisi(Base):
     ara_toplam = Column(Numeric(precision=12, scale=2), default=Decimal("0.00"), nullable=False)
     kdv_toplam = Column(Numeric(precision=12, scale=2), default=Decimal("0.00"), nullable=False)
     genel_toplam = Column(Numeric(precision=12, scale=2), default=Decimal("0.00"), nullable=False)
-    odeme_tipi = Column(String(20), nullable=False)  # NAKIT / KART / BAKIYE / VERESIYE / KARMA
+    odeme_tipi = Column(String(20), nullable=False)  # NAKIT / KART / CEK / KARMA
     durum = Column(String(20), default="TAMAMLANDI", nullable=False)  # TAMAMLANDI / IPTAL
     aciklama = Column(Text, nullable=True)
     admin_id = Column(Integer, ForeignKey("adminler.id"), nullable=False)
@@ -157,7 +161,7 @@ class IadeFisi(Base):
     musteri_id = Column(Integer, ForeignKey("musteriler.id"), nullable=True)
     tarih = Column(DateTime, default=datetime.now)
     toplam_tutar = Column(Numeric(precision=12, scale=2), default=Decimal("0.00"), nullable=False)
-    iade_yontemi = Column(String(20), nullable=False)  # NAKIT_ODE / BAKIYEYE_EKLE / BORCTAN_DUS
+    iade_yontemi = Column(String(20), nullable=False)  # NAKIT_ODE / KART_ODE / CEK_ODE
     aciklama = Column(Text, nullable=True)
     admin_id = Column(Integer, ForeignKey("adminler.id"), nullable=False)
 
@@ -186,9 +190,9 @@ class Odeme(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     musteri_id = Column(Integer, ForeignKey("musteriler.id"), nullable=False)
-    islem_tipi = Column(String(20), nullable=False)  # TAHSILAT / BAKIYE_YUKLEME / SATIS_BORC / IADE_ALACAK
+    islem_tipi = Column(String(20), nullable=False)  # SATIS_ODEME (KARMA satışta ödeme aracı kırılımı)
     tutar = Column(Numeric(precision=12, scale=2), nullable=False)
-    odeme_araci = Column(String(20), nullable=True)  # NAKIT / KART / BAKIYE
+    odeme_araci = Column(String(20), nullable=True)  # NAKIT / KART / CEK
     iliskili_fis_id = Column(Integer, ForeignKey("satis_fisleri.id"), nullable=True)
     tarih = Column(DateTime, default=datetime.now)
     aciklama = Column(Text, nullable=True)

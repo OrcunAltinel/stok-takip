@@ -62,9 +62,7 @@ class AnaPanelEkrani(QWidget):
         kpi_satir = QHBoxLayout()
         self.kpi_bugun = KpiKart("Bugün Satış", "#a6e3a1")
         self.kpi_ay = KpiKart("Bu Ay Satış", "#89b4fa")
-        self.kpi_veresiye = KpiKart("Toplam Veresiye", "#f38ba8")
-        self.kpi_bakiye = KpiKart("Toplam Müşteri Bakiyesi", "#fab387")
-        for kpi in [self.kpi_bugun, self.kpi_ay, self.kpi_veresiye, self.kpi_bakiye]:
+        for kpi in [self.kpi_bugun, self.kpi_ay]:
             kpi.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
             kpi_satir.addWidget(kpi)
         ana.addLayout(kpi_satir)
@@ -73,7 +71,8 @@ class AnaPanelEkrani(QWidget):
         alt = QHBoxLayout()
 
         # Kritik stok
-        kritik_grup = QGroupBox("Kritik Stok Altındaki Ürünler")
+        self.kritik_grup = QGroupBox("Kritik Stok Altındaki Ürünler")
+        kritik_grup = self.kritik_grup
         kritik_layout = QVBoxLayout(kritik_grup)
         self.kritik_tablo = QTableWidget(0, 4)
         self.kritik_tablo.setHorizontalHeaderLabels(["Kod", "Ürün Adı", "Stok", "Kritik Seviye"])
@@ -122,13 +121,19 @@ class AnaPanelEkrani(QWidget):
             ozet = rapor_servisi.dashboard_ozet()
             self.kpi_bugun.guncelle(para_formatla(ozet["bugun_satis"]))
             self.kpi_ay.guncelle(para_formatla(ozet["bu_ay_satis"]))
-            self.kpi_veresiye.guncelle(para_formatla(ozet["toplam_veresiye"]))
-            self.kpi_bakiye.guncelle(para_formatla(ozet["toplam_bakiye"]))
         except Exception:
             pass
 
         try:
-            kritikler = urun_servisi.kritik_stok_urunleri()
+            _KRITIK_GOSTER_LIMIT = 50
+            kritikler_tumu = urun_servisi.kritik_stok_urunleri()
+            kritikler = kritikler_tumu[:_KRITIK_GOSTER_LIMIT]
+            if len(kritikler_tumu) > _KRITIK_GOSTER_LIMIT:
+                self.kritik_grup.setTitle(
+                    f"Kritik Stok Altındaki Ürünler (en kritik {_KRITIK_GOSTER_LIMIT} / toplam {len(kritikler_tumu)})"
+                )
+            else:
+                self.kritik_grup.setTitle("Kritik Stok Altındaki Ürünler")
             self.kritik_tablo.setRowCount(len(kritikler))
             from decimal import Decimal
             from PySide6.QtGui import QColor

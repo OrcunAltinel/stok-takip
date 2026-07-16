@@ -2,13 +2,14 @@
 
 from decimal import Decimal
 
+from PySide6.QtCore import QStringListModel, Qt
 from PySide6.QtWidgets import (
-    QAbstractItemView, QComboBox, QGroupBox, QHBoxLayout, QHeaderView,
-    QLabel, QLineEdit, QMessageBox, QPushButton, QTableWidget,
+    QAbstractItemView, QComboBox, QCompleter, QGroupBox, QHBoxLayout,
+    QHeaderView, QLabel, QLineEdit, QMessageBox, QPushButton, QTableWidget,
     QTableWidgetItem, QVBoxLayout, QWidget,
 )
 
-from servisler import iade_servisi
+from servisler import iade_servisi, satis_servisi
 from veritabani.modeller import Admin
 from yardimcilar.formatlayici import miktar_formatla, para_formatla, tarih_formatla
 
@@ -33,8 +34,12 @@ class IadeEkrani(QWidget):
         arama_grup = QGroupBox("Orijinal Fiş")
         a_layout = QHBoxLayout(arama_grup)
         self.fis_no_edit = QLineEdit()
-        self.fis_no_edit.setPlaceholderText("Fiş no girin (örn: SF-2026-000001)")
+        self.fis_no_edit.setPlaceholderText("Fiş no girin (örn: SF-2026-000001) — Tab ile tamamlar")
         self.fis_no_edit.returnPressed.connect(self._fis_ara)
+        self._fis_no_tamamlayici = QCompleter()
+        self._fis_no_tamamlayici.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
+        self._fis_no_tamamlayici.setCompletionMode(QCompleter.CompletionMode.InlineCompletion)
+        self.fis_no_edit.setCompleter(self._fis_no_tamamlayici)
         ara_btn = QPushButton("Fişi Getir")
         ara_btn.clicked.connect(self._fis_ara)
         self.fis_bilgi = QLabel("")
@@ -58,7 +63,7 @@ class IadeEkrani(QWidget):
         alt_grup = QGroupBox("İade Ayarları")
         alt_layout = QHBoxLayout(alt_grup)
         self.iade_yontemi = QComboBox()
-        self.iade_yontemi.addItems(["NAKIT_ODE", "BAKIYEYE_EKLE", "BORCTAN_DUS"])
+        self.iade_yontemi.addItems(["NAKIT_ODE", "KART_ODE", "CEK_ODE"])
         self.aciklama_edit = QLineEdit()
         self.aciklama_edit.setPlaceholderText("Açıklama...")
         self.iade_toplam_label = QLabel("İade Tutarı: —")
@@ -81,6 +86,7 @@ class IadeEkrani(QWidget):
         self.kalem_tablo.setRowCount(0)
         self._fis_detay = None
         self.kaydet_btn.setEnabled(False)
+        self._fis_no_tamamlayici.setModel(QStringListModel(satis_servisi.tum_fis_numaralari()))
 
     def _fis_ara(self):
         fis_no = self.fis_no_edit.text().strip().upper()
