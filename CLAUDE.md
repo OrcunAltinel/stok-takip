@@ -66,3 +66,23 @@ Tüm değişken, fonksiyon, sınıf ve tablo adları Türkçe, ASCII uyumlu yaz�
 - **İade → Stok**: `iade_servisi.iade_olustur()` her kalem için otomatik `IADE_GIRIS` stok hareketi oluşturur ve `stok_miktari`'nı artırır. İade yöntemi (`NAKIT_ODE`/`KART_ODE`/`CEK_ODE`) sadece bilgi amaçlıdır, müşteri bakiyesini etkilemez.
 - **Müşteri geçmişi**: `musteri_servisi.cari_hareketler()` müşterinin satış (`SatisFisi`) ve iade (`IadeFisi`) kayıtlarını doğrudan sorgulayıp kronolojik döner; ayrı bir borç/bakiye defteri tutulmaz.
 - **Yedekleme**: `yedek_servisi.otomatik_yedek_al()` `AnaPencere.closeEvent()` içinde çağrılır; son 30 yedek `yedekler/` klasöründe tutulur.
+
+## BİLİNEN SORUN — BİR SONRAKİ SESSION'DA ÇÖZÜLECEK
+
+**Hata**: İade ekranında "Fişi Getir" butonuna basınca çöküyor:
+```
+File "servisler\iade_servisi.py", line 122, in fis_kalemleri_getir
+    m = session.query(Musteri).filter_by(id=fis.musteri_id).first()
+NameError: name 'Musteri' is not defined
+```
+
+**Sebep**: Borç/veresiye/bakiye kaldırma refaktöründe `servisler/iade_servisi.py` içindeki `Musteri` importu "artık kullanılmıyor" sanılarak silindi, ama `fis_kalemleri_getir()` fonksiyonu müşteri adını göstermek için hâlâ `Musteri` modelini kullanıyor.
+
+**Çözüm**: `servisler/iade_servisi.py` dosyasının import satırına `Musteri`'yi geri ekle:
+```python
+from veritabani.modeller import (
+    IadeFisi, IadeKalemi, Musteri, SatisFisi, StokHareketi, Urun,
+)
+```
+
+**ÖNEMLİ — bu bölümü çözdükten sonra bu "BİLİNEN SORUN" bölümünü CLAUDE.md'den tamamen sil.**
